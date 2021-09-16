@@ -224,7 +224,55 @@ namespace imghash {
 
 		//by row:
 		void start(size_t input_height, size_t input_width, size_t input_channels);
-		bool add_row(const uint8_t* input_row);
+		
+		template<class RowT>
+		bool add_row(const RowT* input_row)
+		{
+			auto img_row = img.begin() + i;
+			if (img.height == in_h) {
+				resize_row<RowT, float, float>(in_c, in_w, input_row, img.width, img_row, tile_w, false, hist);
+				++y;
+				i += img.row_size;
+			}
+			else if (img.height < in_h) {
+				if (ty == 0) {
+					//zero the first row
+					for (size_t x = 0, j = i; x < img.width; ++x) {
+						for (size_t c = 0; c < img.channels; ++c, ++j) {
+							img[j] = 0.0f;
+						}
+					}
+				}
+				resize_row<RowT, float, float>(in_c, in_w, input_row, img.width, img_row, tile_w, true, hist);
+				++ty;
+				size_t th = tile_h[y];
+				if (ty >= th) {
+					ty = 0;
+					++y;
+					i += img.row_size;
+					for (size_t x = 0, j = 0; x < img.width; ++x) {
+						for (size_t c = 0; c < img.channels; ++c, ++j) {
+							img_row[j] /= th;
+						}
+					}
+				}
+			}
+			else {
+				std::vector<float> tmp(img.width * img.channels, 0);
+				resize_row<RowT, float, float>(in_c, in_w, input_row, img.width, tmp.data(), tile_w, false, hist);
+				size_t th = tile_h[y];
+				for (ty = 0; ty < th; ++ty, ++y, i += img.row_size) {
+					for (size_t x = 0, j = 0; x < img.width; ++x) {
+						for (size_t c = 0; c < img.channels; ++c, ++j) {
+							img[i + j] = tmp[j];
+						}
+					}
+				}
+			}
+			//do we need more rows?
+			return y < img.height;
+		}
+
 		Image<float> stop();
 
 		//full-frame:
