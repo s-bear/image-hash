@@ -342,52 +342,6 @@ namespace imghash {
 		return hash;
 	}
 
-	struct IndexScaler
-	{
-		size_t a, b, n, na, nb;
-		intptr_t Da, Db;
-		IndexScaler(size_t na, size_t nb)
-			: a(0), b(0), n(std::max(na, nb)), na(na), nb(nb), Da(0), Db(0)
-		{
-			reset();
-		}
-		void reset() {
-			a = b = 0;
-			if (na > nb) {
-				Da = intptr_t(nb) - 3 * intptr_t(na);
-				Db = 2 * intptr_t(nb) - 2 * intptr_t(na);
-			}
-			else if (na < nb) {
-				Da = 2 * intptr_t(nb) - 2 * intptr_t(na);
-				Db = intptr_t(nb) - 3 * intptr_t(na);
-			}
-			else {
-				Da = intptr_t(nb) - 2 * intptr_t(na);
-				Db = 2 * intptr_t(nb) - intptr_t(na);
-			}
-		}
-		bool ok() const {
-			return (a < na) || (b < nb);
-		}
-		bool next(int& dx, int& dy) {
-			intptr_t d = 0;
-			dx = dy = 0;
-			if (Db > 0) {
-				++b;
-				dy = 1;
-				d -= intptr_t(na);
-			}
-			if (Da < 0) {
-				++a;
-				dx = 1;
-				d += intptr_t(nb);
-			}
-			Db += 2 * d;
-			Da += 2 * d;
-			return (a < na) || (b < nb);
-		}
-	};
-
 	std::vector<size_t> tile_size(size_t a, size_t b) 
 	{
 		// a > b
