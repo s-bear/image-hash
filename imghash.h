@@ -28,6 +28,8 @@ namespace imghash {
 	bool test_png(FILE* file);
 	Image<float> load_png(FILE* file, Preprocess& prep);
 #endif
+	bool test_ppm(FILE* file);
+	Image<float> load_ppm(FILE* file, Preprocess& prep);
 
 	template<class T> T convert_pix(uint8_t p);
 	template<class T> T convert_pix(uint16_t p);
