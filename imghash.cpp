@@ -29,6 +29,7 @@ void print_usage() {
 	std::cout << "    -b, --block : use block hash\n";
 	std::cout << "    -d, --dct: use dct hash\n";
 	std::cout << "    -de, --dct_even : use dct hash with even-mode DCT coefficients, for mirror/flip tolerant hashing\n";
+	std::cout << "    -x : binary output. Each hash is 8 bytes.\n";
 	std::cout << "  Supported file formats: \n";
 #ifdef USE_JPEG
 	std::cout << "    jpeg\n";
@@ -44,6 +45,12 @@ void print_version()
 	std::cout << "imghash v0.0.1";
 }
 
+template<class T>
+void get_bytes(T t, std::vector<uint8_t>& b)
+{
+	for (size_t i = 0; i < sizeof(T); ++i, t >>= 8) b.push_back(static_cast<uint8_t>(t & 0xff));
+}
+
 int main(int argc, const char* argv[])
 {
 	if (argc <= 1) {
@@ -56,6 +63,7 @@ int main(int argc, const char* argv[])
 	bool debug = false;
 	bool use_dct = false;
 	bool use_block = false;
+	bool binary = false;
 	for (size_t i = 1; i < argc; ++i) {
 		auto arg = std::string(argv[i]);
 		if (arg[0] == '-') {
@@ -70,6 +78,7 @@ int main(int argc, const char* argv[])
 			else if (arg == "-de" || arg == "--dct_even") use_dct = even = true;
 			else if (arg == "-d" || arg == "--dct") use_dct = true;
 			else if (arg == "-b" || arg == "--block") use_block = true;
+			else if (arg == "-x") binary = true;
 			else if (arg == "--debug") debug = true;
 			else {
 				std::cerr << "Unknown option: " << arg << "\n";
@@ -93,26 +102,40 @@ int main(int argc, const char* argv[])
 		try {
 			Image<float> img = load(file, prep);
 			if (debug) {
-				
 				save(file + ".pgm", img, 1.0f);
 			}
 			uint64_t dct_hash = 0, block_hash = 0;
-			if (use_dct) {
-				dct_hash = dct.apply(img);
-			}
 			if (use_block) {
 				block_hash = block.apply(img);
 			}
-			std::string delim = "";
 			if (use_dct) {
-				std::cout << delim << std::setw(16) << std::setfill('0') << std::hex << dct_hash;
-				delim = " ";
+				dct_hash = dct.apply(img);
 			}
-			if (use_block) {
-				std::cout << delim << std::setw(16) << std::setfill('0') << std::hex << block_hash;
-				delim = " ";
+			
+			if (binary) {
+				std::vector<uint8_t> data;
+				data.reserve(16);
+				if (use_block) {
+					get_bytes(block_hash, data);
+				}
+				if (use_dct) {
+					get_bytes(dct_hash, data);
+				}
+				for (auto b : data) std::cout.put(static_cast<char>(b));
 			}
-			std::cout << "\n";
+			else {
+				std::string delim = "";
+				if (use_block) {
+					std::cout << delim << std::setw(16) << std::setfill('0') << std::hex << block_hash;
+					delim = " ";
+				}
+				if (use_dct) {
+					std::cout << delim << std::setw(16) << std::setfill('0') << std::hex << dct_hash;
+					delim = " ";
+				}
+				
+				std::cout << "\n";
+			}
 		}
 		catch (...) {
 			std::cerr << "FAILED " << file << "\n";
