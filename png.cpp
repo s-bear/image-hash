@@ -17,32 +17,43 @@ namespace imghash {
 		return png_sig_cmp(header, 0, 8) == 0;
 	}
 
+	namespace {
+		void my_error_fn(png_structp png_ptr, png_const_charp error_msg) 
+		{
+			std::string* msg = (std::string*)png_get_error_ptr(png_ptr);
+			*msg = error_msg;
+			longjmp(png_jmpbuf(png_ptr), 1);
+		}
+		void my_warning_fn(png_structp png_ptr, png_const_charp warning_msg) 
+		{
+			return; //ignore warnings
+		}
+	}
+
 	Image<float> load_png(FILE* file, Preprocess& prep)
 	{
-		png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+		std::string error_message;
+		png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING,
+			&error_message, my_error_fn, my_warning_fn);
 		if (!png_ptr) 
 		{
-			fclose(file);
-			throw std::runtime_error("PNG Error");
+			throw std::runtime_error("PNG: Error creating read struct");
 		}
 		png_infop info_ptr = png_create_info_struct(png_ptr);
 		if (!info_ptr)
 		{
 			png_destroy_read_struct(&png_ptr, nullptr, nullptr);
-			fclose(file);
-			throw std::runtime_error("PNG Error");
+			throw std::runtime_error("PNG: Error creating info struct");
 		}
 		png_infop end_info = png_create_info_struct(png_ptr);
 		if (!info_ptr)
 		{
 			png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
-			fclose(file);
-			throw std::runtime_error("PNG Error");
+			throw std::runtime_error("PNG: Error creating info struct");
 		}
 		if (setjmp(png_jmpbuf(png_ptr))) {
-			png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);
-			fclose(file);
-			throw std::runtime_error("PNG Error");
+			png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);	
+			throw std::runtime_error("PNG: Error");
 		}
 
 		png_init_io(png_ptr, file);

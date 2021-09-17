@@ -12,13 +12,15 @@ namespace {
 	struct my_error_mgr {
 		jpeg_error_mgr mgr;
 		jmp_buf setjmp_buffer;
+		std::string message;
 	};
 
 	void my_output_message(j_common_ptr cinfo)
 	{
 		char buffer[JMSG_LENGTH_MAX];
 		(*cinfo->err->format_message)(cinfo, buffer);
-		std::cerr << "JPEG: " << buffer << std::endl;
+		my_error_mgr* my_err = (my_error_mgr*)(cinfo->err);
+		my_err->message = std::string("JPEG: ") + std::string(buffer);
 	}
 
 	void my_error_exit(j_common_ptr cinfo)
@@ -48,7 +50,7 @@ namespace imghash {
 	{
 		//1. Allocate & init decompression object
 		jpeg_decompress_struct cinfo{ 0 };
-		my_error_mgr jerr{ 0 };
+		my_error_mgr jerr{ {0}, 0, {} };
 
 		// set up error handling
 		cinfo.err = jpeg_std_error(&jerr.mgr);
@@ -56,8 +58,7 @@ namespace imghash {
 		jerr.mgr.output_message = my_output_message;
 		if (setjmp(jerr.setjmp_buffer)) {
 			jpeg_destroy_decompress(&cinfo);
-			fclose(file);
-			throw std::runtime_error("JPEG error");
+			throw std::runtime_error(jerr.message);
 		}
 
 		jpeg_create_decompress(&cinfo);

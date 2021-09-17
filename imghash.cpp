@@ -198,21 +198,28 @@ namespace imghash {
 		if (file == nullptr) {
 			throw std::runtime_error("Failed to open file");
 		}
-		if (test_ppm(file)) {
-			return load_ppm(file, prep);
+		try {
+			if (test_ppm(file)) {
+				return load_ppm(file, prep);
+			}
+		#ifdef USE_JPEG
+			else if (test_jpeg(file)) {
+				return load_jpeg(file, prep);
+			}
+		#endif
+		#ifdef USE_PNG
+			else if (test_png(file)) {
+				return load_png(file, prep);
+			}
+		#endif
+			else {
+				throw std::runtime_error("Unsupported file format");
+			}
+			fclose(file);
 		}
-	#ifdef USE_JPEG
-		else if (test_jpeg(file)) {
-			return load_jpeg(file, prep);
-		}
-	#endif
-	#ifdef USE_PNG
-		else if (test_png(file)) {
-			return load_png(file, prep);
-		}
-	#endif
-		else {
-			throw std::runtime_error("Unsupported file format");
+		catch (std::exception& e) {
+			fclose(file);
+			throw e;
 		}
 	}
 
@@ -226,9 +233,6 @@ namespace imghash {
 
 	Image<float> load_ppm(FILE* file, Preprocess& prep)
 	{
-		const size_t maxsize = 0x40000000; // 1 GB
-		const size_t bufsize = 256;
-		char buffer[bufsize] = { 0 };
 		// 1. Magic number
 		// 2. Whitespace
 		// 3. Width, ASCII decimal
@@ -239,13 +243,10 @@ namespace imghash {
 		// 8. A single whitespace character
 		// 9. Raster (width x height x 3) bytes, x2 if maxval > 255, MSB first
 		// At any point before 8, # begins a comment, which persists until the next newline or carriage return
-				
-		//1. Magic number
-		fread(buffer, sizeof(char), 2, file);
-		if (buffer[0] != 'P' || buffer[1] != '6') {
-			fclose(file);
-			throw std::runtime_error("PPM: Invalid file");
-		}
+
+		const size_t maxsize = 0x40000000; // 1 GB
+		const size_t bufsize = 256;
+		char buffer[bufsize] = { 0 };
 
 		auto parse_space = [&](int c) {
 			bool comment = ((char)c == '#');
@@ -258,6 +259,9 @@ namespace imghash {
 					if ((char)c == '#') comment = true;
 				}
 			}
+			if (c == EOF) {
+				throw std::runtime_error("PPM: Unexpected EOF");
+			}
 			return c;
 		};
 		auto parse_size = [&](int c, size_t& x) {
@@ -265,56 +269,46 @@ namespace imghash {
 			while (isdigit(c)) {
 				buffer[i++] = (char)c;
 				if (i >= bufsize - 1) {
-					fclose(file);
 					throw std::runtime_error("PPM: Buffer overflow");
 				}
 				c = fgetc(file);
+			}
+			if (c == EOF) {
+				throw std::runtime_error("PPM: Unexpected EOF");
 			}
 			buffer[i] = 0;
 			x = atoll(buffer);
 			return c;
 		};
+				
+		//1. Magic number
+		fread(buffer, sizeof(char), 2, file);
+		if (buffer[0] != 'P' || buffer[1] != '6') {
+			throw std::runtime_error("PPM: Invalid file");
+		}
 
 		// 2. Whitespace or comment
 		int c = fgetc(file);
 		c = parse_space(c);
-		if (c == EOF) {
-			fclose(file);
-			throw std::runtime_error("PPM: Error parsing file");
-		}
+		
 		// 3. Width, ASCII decimal
 		size_t width = 0;
 		c = parse_size(c, width);
-		if (c == EOF) {
-			fclose(file);
-			throw std::runtime_error("PPM: Error parsing file");
-		}
+		
 		// 4. Whitespace
 		c = parse_space(c);
-		if (c == EOF) {
-			fclose(file);
-			throw std::runtime_error("PPM: Error parsing file");
-		}
+		
 		// 5. Height, ASCII decimal
 		size_t height = 0;
 		c = parse_size(c, height);
-		if (c == EOF) {
-			fclose(file);
-			throw std::runtime_error("PPM: Error parsing file");
-		}
+		
 		// 6. Whitespace
 		c = parse_space(c);
-		if (c == EOF) {
-			fclose(file);
-			throw std::runtime_error("PPM: Error parsing file");
-		}
+		
 		// 7. Maxval, ASCII decimal
 		size_t maxval = 0;
 		c = parse_size(c, maxval);
-		if (c == EOF) {
-			fclose(file);
-			throw std::runtime_error("PPM: Error parsing file");
-		}
+		
 		//any final comment
 		bool comment = ((char)c == '#');
 		while (comment && c != EOF) {
@@ -322,13 +316,11 @@ namespace imghash {
 			if (c == '\r' || c == '\n') comment = false;
 		}
 		if (c == EOF) {
-			fclose(file);
-			throw std::runtime_error("PPM: Error parsing file");
+			throw std::runtime_error("PPM: Unexpected EOF");
 		}
 		// 8. A single whitespace character
 		if (!isspace(c)) {
-			fclose(file);
-			throw std::runtime_error("PPM: Error parsing file");
+			throw std::runtime_error("PPM: No whitespace after maxval");
 		}
 
 		//check dimensions
@@ -337,11 +329,9 @@ namespace imghash {
 		bool use_short = maxval > 0xFF;
 		if (use_short) size *= 2;
 		if (maxval > 0xFFFF) {
-			fclose(file);
 			throw std::runtime_error("PPM: Invalid maxval");
 		}
 		if (size > maxsize) {
-			fclose(file);
 			throw std::runtime_error("PPM: Size overflow");
 		}
 		
@@ -356,22 +346,18 @@ namespace imghash {
 					row[i] = (buffer[0] << 8) | (buffer[1]); //deal with endianness
 				}
 				if (i < rowsize) {
-					fclose(file);
 					throw std::runtime_error("PPM: Not enough data");
 				}
 			} while (prep.add_row(row.data()));
 		}
 		else {
 			std::vector<uint8_t> row(rowsize, 0);
-			
 			do {
 				if (fread(row.data(), 1, rowsize, file) < rowsize) {
-					fclose(file);
 					throw std::runtime_error("PPM: Not enough data");
 				}
 			} while (prep.add_row(row.data()));
 		}
-		fclose(file);
 		return prep.stop();
 	}
 
