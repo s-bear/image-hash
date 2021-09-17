@@ -7,7 +7,7 @@ This utility has two hashing methods, a block-rank algorithm and a DCT based alg
 
 The block-rank algorithm further reduces the image to 20x20 pixels, and folds the four quadrants of the image in to produce a mirror-symmetrical 10x10 image. The hash's 64 bits correspond to the central 8x8 pixels of this image. Each is ranked relative to its neighbors, and if greater than half the corresponding bit is set, otherwise it is zero.
 
-The DCT based algorithm simply computes the 2D DCT of the pre-processed image, discarding the 0-frequency and all odd-frequency components. Each bit of the hash is set if the corresponding DCT coefficient is positive.
+The DCT based algorithm simply computes the 2D DCT of the pre-processed image, discarding the 0-frequency and all odd-frequency components. Each bit of the hash is set if the corresponding DCT coefficient is positive. The bits of the hash are ordered such that including fewer DCT terms produces a prefix of the larger hash. That is, the hash produced by `imghash -d1 photo.jpg` will be a prefix that from `imghash -d2 photo.jpg`.
 
 ## Building
 image-hash optionally depends on `libpng` and `libjpeg`. The `vcpkg.json` manifest may be used to collect those libraries automatically.
