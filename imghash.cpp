@@ -29,14 +29,15 @@ using namespace imghash;
 void print_usage() {
 	std::cout << "imghash [OPTIONS] [FILE [FILE ...]]\n";
 	std::cout << "  Computes perceptual image hashes of FILEs.\n\n";
-	std::cout << "  Outputs hexadecimal hashes separated by spaces for each file on a new line.\n";
+	std::cout << "  Outputs hexadecimal hash and filename for each file on a new line.\n";
 	std::cout << "  The default algorithm (if -d is not specified) is a fixed size 64-bit block average hash, with mirror & flip tolerance.\n";
 	std::cout << "  The DCT hash uses only even-mode coefficients, so it is mirror/flip tolerant.\n";
 	std::cout << "  If no FILE is given, reads ppm from stdin\n";
 	std::cout << "  OPTIONS are:\n";
 	std::cout << "    -h, --help : print this message and exit\n";
 	std::cout << "    -dN, --dct N: use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.\n";
-	std::cout << "    -x : binary output.\n";
+	//std::cout << "    -x : binary output.\n";
+	std::cout << "    -q, --quiet : don't output filename.\n";
 	std::cout << "  Supported file formats: \n";
 #ifdef USE_JPEG
 	std::cout << "    jpeg\n";
@@ -566,13 +567,14 @@ namespace imghash {
 
 }
 
-void print_hash(std::ostream& out, const std::vector<uint8_t>& hash, bool binary) {
+void print_hash(std::ostream& out, const std::vector<uint8_t>& hash, const std::string& fname, bool binary, bool quiet) {
 	if (binary) {
 		for (auto b : hash) out.put(static_cast<char>(b));
 	}
 	else {
 		out << std::hex << std::setfill('0');
 		for (auto b : hash) out << std::setw(2) << int(b);
+		if (!quiet) out << " " << fname;
 		out << "\n";
 	}
 }
@@ -585,6 +587,7 @@ int main(int argc, const char* argv[])
 	bool debug = false;
 	bool use_dct = false;
 	bool binary = false;
+	bool quiet = false;
 	for (size_t i = 1; i < argc; ++i) {
 		auto arg = std::string(argv[i]);
 		if (arg[0] == '-') {
@@ -625,6 +628,7 @@ int main(int argc, const char* argv[])
 					return 1;
 				}
 			}
+			else if (arg == "-q" || arg == "--quiet") quiet = true;
 			else if (arg == "-x") binary = true;
 			else if (arg == "--debug") debug = true;
 			else {
@@ -666,9 +670,10 @@ int main(int argc, const char* argv[])
 	#endif
 		try {
 			Image<float> img;
+			std::string file; 
 			img = load_ppm(stdin, prep);
 			while (img.size > 0) {
-				print_hash(std::cout, hash->apply(img), binary);
+				print_hash(std::cout, hash->apply(img), file, binary, true);
 				img = load_ppm(stdin, prep, false); //it's OK to get an empty file here
 			}
 		}
@@ -687,7 +692,7 @@ int main(int argc, const char* argv[])
 			try {
 				Image<float> img = load(file, prep);
 				if (debug) save(file + ".pgm", img, 1.0f);
-				print_hash(std::cout, hash->apply(img), binary);
+				print_hash(std::cout, hash->apply(img), file, binary, quiet);
 			}
 			catch (std::exception& e) {
 				std::cerr << "Exception while processing file: " << file << "\n";
