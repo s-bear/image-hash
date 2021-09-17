@@ -281,16 +281,24 @@ namespace imghash {
 		Image<float> apply(const Image<uint8_t>& input);
 	};
 
+	
 	class Hash
 	{
+	protected:
+		std::vector<uint8_t> bytes;
+		size_t bi;
+
+		void clear();
+		void append_bit(bool b);
 	public:
-		virtual uint64_t apply(const Image<float>& image) = 0;
+		Hash();
+		virtual std::vector<uint8_t> apply(const Image<float>& image) = 0;
 	};
 
 	class BlockHash : virtual public Hash
 	{
 	public:
-		uint64_t apply(const Image<float>& image);
+		std::vector<uint8_t> apply(const Image<float>& image);
 	};
 
 	class DCTHash : virtual public Hash
@@ -335,7 +343,7 @@ namespace imghash {
 	public:
 		DCTHash();
 		DCTHash(unsigned M, bool even);
-		uint64_t apply(const Image<float>& image);
+		std::vector<uint8_t> apply(const Image<float>& image);
 	};
 
 }

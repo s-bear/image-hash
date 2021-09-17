@@ -24,11 +24,11 @@ void print_usage() {
 	std::cout << "imghash [OPTIONS] FILE [FILE ...]\n";
 	std::cout << "  Computes perceptual image hashes of FILEs.\n\n";
 	std::cout << "  Outputs hexadecimal hashes separated by spaces for each file on a new line.\n";
+	std::cout << "  The DCT hash uses only even-mode coefficients, so it is mirror/flip tolerant.\n";
 	std::cout << "  OPTIONS are:\n";
 	std::cout << "    -h, --help : print this message and exit\n";
 	std::cout << "    -b, --block : use block hash\n";
-	std::cout << "    -d, --dct: use dct hash\n";
-	std::cout << "    -de, --dct_even : use dct hash with even-mode DCT coefficients, for mirror/flip tolerant hashing\n";
+	std::cout << "    -dN, --dct N: use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.\n";
 	std::cout << "    -x : binary output. Each hash is 8 bytes.\n";
 	std::cout << "  Supported file formats: \n";
 #ifdef USE_JPEG
@@ -45,12 +45,6 @@ void print_version()
 	std::cout << "imghash v0.0.1";
 }
 
-template<class T>
-void get_bytes(T t, std::vector<uint8_t>& b)
-{
-	for (size_t i = 0; i < sizeof(T); ++i, t >>= 8) b.push_back(static_cast<uint8_t>(t & 0xff));
-}
-
 int main(int argc, const char* argv[])
 {
 	if (argc <= 1) {
@@ -59,6 +53,7 @@ int main(int argc, const char* argv[])
 	}
 
 	std::vector<std::string> files;
+	int dct_size = 1;
 	bool even = false;
 	bool debug = false;
 	bool use_dct = false;
@@ -75,8 +70,35 @@ int main(int argc, const char* argv[])
 				print_version();
 				return 0;
 			}
-			else if (arg == "-de" || arg == "--dct_even") use_dct = even = true;
-			else if (arg == "-d" || arg == "--dct") use_dct = true;
+			else if (arg.substr(0, 2) == "-d") {
+				use_dct = even = true;
+				if (arg.size() > 2) {
+					auto size_str = arg.substr(2);
+					if (size_str.size() > 1 || !isdigit(size_str[0])) {
+						std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
+						print_usage();
+						return 1;
+					}
+					dct_size = static_cast<size_t>(atoi(size_str.c_str()));
+				}
+			}
+			else if (arg == "--dct") {
+				use_dct = even = true;
+				if (++i < argc) {
+					auto size_str = std::string(argv[i]);
+					if (size_str.size() > 1 || !isdigit(size_str[0])) {
+						std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
+						print_usage();
+						return 1;
+					}
+					dct_size = static_cast<size_t>(atoi(size_str.c_str()));
+				}
+				else {
+					std::cerr << "Missing dct size";
+					print_usage();
+					return 1;
+				}
+			}
 			else if (arg == "-b" || arg == "--block") use_block = true;
 			else if (arg == "-x") binary = true;
 			else if (arg == "--debug") debug = true;
@@ -92,9 +114,15 @@ int main(int argc, const char* argv[])
 	}
 	if (!(use_dct || use_block)) use_block = true;
 
+	if (use_dct && (dct_size < 1 || dct_size > 4)) {
+		std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
+		print_usage();
+		return 1;
+	}
+
 	Preprocess prep(128, 128);
 	
-	auto dct = DCTHash(8, even);
+	auto dct = DCTHash(8*dct_size, even);
 	auto block = BlockHash();
 
 	int ret = 0;
@@ -104,7 +132,7 @@ int main(int argc, const char* argv[])
 			if (debug) {
 				save(file + ".pgm", img, 1.0f);
 			}
-			uint64_t dct_hash = 0, block_hash = 0;
+			std::vector<uint8_t> dct_hash, block_hash;
 			if (use_block) {
 				block_hash = block.apply(img);
 			}
@@ -113,24 +141,20 @@ int main(int argc, const char* argv[])
 			}
 			
 			if (binary) {
-				std::vector<uint8_t> data;
-				data.reserve(16);
-				if (use_block) {
-					get_bytes(block_hash, data);
-				}
-				if (use_dct) {
-					get_bytes(dct_hash, data);
-				}
-				for (auto b : data) std::cout.put(static_cast<char>(b));
+				for (auto b : block_hash) std::cout.put(static_cast<char>(b));
+				for (auto b : dct_hash) std::cout.put(static_cast<char>(b));
 			}
 			else {
 				std::string delim = "";
+				std::cout << std::hex << std::setfill('0');
 				if (use_block) {
-					std::cout << delim << std::setw(16) << std::setfill('0') << std::hex << block_hash;
+					std::cout << delim;
+					for (auto b : block_hash) std::cout << std::setw(2) << int(b);
 					delim = " ";
 				}
 				if (use_dct) {
-					std::cout << delim << std::setw(16) << std::setfill('0') << std::hex << dct_hash;
+					std::cout << delim;
+					for (auto b : dct_hash) std::cout << std::setw(2) << int(b);
 					delim = " ";
 				}
 				
@@ -361,7 +385,25 @@ namespace imghash {
 		return prep.stop();
 	}
 
-	uint64_t BlockHash::apply(const Image<float>& image)
+	Hash::Hash() : bytes(), bi(8) {}
+
+	void Hash::clear() {
+		bytes.clear();
+		bi = 8;
+	}
+
+	void Hash::append_bit(bool b) {
+		if (bi > 7) {
+			bytes.push_back(0);
+			bi = 0;
+		}
+		if (b) {
+			bytes.back() |= (uint8_t(1) << bi);
+		}
+		++bi;
+	}
+
+	std::vector<uint8_t> BlockHash::apply(const Image<float>& image)
 	{
 		const size_t N = 8;
 		const size_t M = N + 2;
@@ -381,7 +423,8 @@ namespace imghash {
 			}
 		}
 
-		uint64_t hash = 0;
+		clear();
+		bytes.reserve(8);
 		size_t i0 = 0;
 		size_t i1 = tmp.row_size;
 		size_t i2 = 2*tmp.row_size;
@@ -405,14 +448,13 @@ namespace imghash {
 				int rank = (p > p00) + (p > p01) + (p > p02) + (p > p10);
 				rank += (p > p12) + (p > p20) + (p > p21) + (p > p22);
 				//the bit is set if p is greater than half the others
-				hash <<= 1;
-				if (rank >= 4) hash |= 1;
+				append_bit(rank >= 4);
 			}
 			i0 = i1;
 			i1 = i2;
 			i2 += tmp.row_size;
 		}
-		return hash;
+		return bytes;
 	}
 
 	DCTHash::DCTHash(unsigned M, bool even)
@@ -459,9 +501,11 @@ namespace imghash {
 		else return mat(N, M);
 	}
 
-	uint64_t DCTHash::apply(const Image<float>& image)
+	std::vector<uint8_t> DCTHash::apply(const Image<float>& image)
 	{
-		if (image.width != image.height) return 0;
+		if (image.width != image.height || image.channels != 1) {
+			throw std::runtime_error("DCT: image must be square and single-channel");
+		}
 		if (N_ != image.width) {
 			N_ = image.width;
 			m_ = mat(N_, M_, even_);
@@ -493,22 +537,44 @@ namespace imghash {
 			}
 		}
 
-		/* Phase 2: Apply DCT along columns & compute hash */
-		uint64_t hash = 0;
+		/* Phase 2: Apply DCT along columns */
+		Image<float> dct(M_, M_);
 		//iterate over vertical spatial frequencies
-		for (size_t v = 0; v < M_; ++v) {
+		for (size_t v = 0, i = 0; v < M_; ++v, i += dct.row_size) {
 			//iterate over horizontal spatial frequencies
-			for (size_t u = 0; u < M_; ++u) {
+			for (size_t u = 0, j = i; u < M_; ++u, ++j) {
 				//reduce over image rows
 				float dct_uv = 0.0f;
 				for (size_t y = 0, k = v, di = u; y < N_; ++y, k += M_, di += M_) {
 					dct_uv += m_[k] * dct_1[di];
 				}
-				hash <<= 1;
-				if (dct_uv > 0) hash |= 1;
+				dct[j] = dct_uv;
 			}
 		}
-		return hash;
+
+		/* Phase 3: Compute hash */
+		clear();
+		bytes.reserve((size_t(M_) * M_ + 7) / 8);
+		//iterate over the DCT so that we always output the bits in the same order, no matter the size
+		// we will start in the corner, and then build up in square shells:
+		// 0 1 4
+		// 2 3 5
+		// 6 7 8
+		
+		//iterate across the first row
+		for (size_t u = 0; u < M_; ++u) {
+			//iterate down the column at u, to the (u-1) row
+			size_t i = 0;
+			for (size_t v = 0; v < u; ++v, i += dct.row_size) {
+				append_bit(dct[i + u] > 0);
+			}
+			//iterate across row v, to column u
+			for (size_t uu = 0, j = i; uu < u + 1; ++uu, ++j) {
+				append_bit(dct[j] > 0);
+			}
+		}
+
+		return bytes;
 	}
 
 	std::vector<size_t> tile_size(size_t a, size_t b) 
