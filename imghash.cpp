@@ -11,6 +11,12 @@
 #include <iomanip>
 #include <bitset>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
+
+
 #ifdef max
 #undef max
 #endif
@@ -21,13 +27,14 @@
 using namespace imghash;
 
 void print_usage() {
-	std::cout << "imghash [OPTIONS] FILE [FILE ...]\n";
+	std::cout << "imghash [OPTIONS] [FILE [FILE ...]]\n";
 	std::cout << "  Computes perceptual image hashes of FILEs.\n\n";
 	std::cout << "  Outputs hexadecimal hashes separated by spaces for each file on a new line.\n";
+	std::cout << "  The default algorithm (if -d is not specified) is a fixed size 64-bit block average hash, with mirror & flip tolerance.\n";
 	std::cout << "  The DCT hash uses only even-mode coefficients, so it is mirror/flip tolerant.\n";
+	std::cout << "  If no FILE is given, reads from stdin\n";
 	std::cout << "  OPTIONS are:\n";
 	std::cout << "    -h, --help : print this message and exit\n";
-	std::cout << "    -b, --block : use block hash\n";
 	std::cout << "    -dN, --dct N: use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.\n";
 	std::cout << "    -x : binary output. Each hash is 8 bytes.\n";
 	std::cout << "  Supported file formats: \n";
@@ -44,132 +51,6 @@ void print_version()
 {
 	std::cout << "imghash v0.0.1";
 }
-
-int main(int argc, const char* argv[])
-{
-	if (argc <= 1) {
-		print_usage();
-		return 1;
-	}
-
-	std::vector<std::string> files;
-	int dct_size = 1;
-	bool even = false;
-	bool debug = false;
-	bool use_dct = false;
-	bool use_block = false;
-	bool binary = false;
-	for (size_t i = 1; i < argc; ++i) {
-		auto arg = std::string(argv[i]);
-		if (arg[0] == '-') {
-			if (arg == "-h" || arg == "--help") {
-				print_usage();
-				return 0;
-			}
-			else if (arg == "-v" || arg == "--version") {
-				print_version();
-				return 0;
-			}
-			else if (arg.substr(0, 2) == "-d") {
-				use_dct = even = true;
-				if (arg.size() > 2) {
-					auto size_str = arg.substr(2);
-					if (size_str.size() > 1 || !isdigit(size_str[0])) {
-						std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
-						print_usage();
-						return 1;
-					}
-					dct_size = static_cast<size_t>(atoi(size_str.c_str()));
-				}
-			}
-			else if (arg == "--dct") {
-				use_dct = even = true;
-				if (++i < argc) {
-					auto size_str = std::string(argv[i]);
-					if (size_str.size() > 1 || !isdigit(size_str[0])) {
-						std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
-						print_usage();
-						return 1;
-					}
-					dct_size = static_cast<size_t>(atoi(size_str.c_str()));
-				}
-				else {
-					std::cerr << "Missing dct size";
-					print_usage();
-					return 1;
-				}
-			}
-			else if (arg == "-b" || arg == "--block") use_block = true;
-			else if (arg == "-x") binary = true;
-			else if (arg == "--debug") debug = true;
-			else {
-				std::cerr << "Unknown option: " << arg << "\n";
-				print_usage();
-				return 1;
-			}
-		}
-		else {
-			files.emplace_back(std::move(arg));
-		}
-	}
-	if (!(use_dct || use_block)) use_block = true;
-
-	if (use_dct && (dct_size < 1 || dct_size > 4)) {
-		std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
-		print_usage();
-		return 1;
-	}
-
-	Preprocess prep(128, 128);
-	
-	auto dct = DCTHash(8*dct_size, even);
-	auto block = BlockHash();
-
-	int ret = 0;
-	for (const auto& file : files) {
-		try {
-			Image<float> img = load(file, prep);
-			if (debug) {
-				save(file + ".pgm", img, 1.0f);
-			}
-			std::vector<uint8_t> dct_hash, block_hash;
-			if (use_block) {
-				block_hash = block.apply(img);
-			}
-			if (use_dct) {
-				dct_hash = dct.apply(img);
-			}
-			
-			if (binary) {
-				for (auto b : block_hash) std::cout.put(static_cast<char>(b));
-				for (auto b : dct_hash) std::cout.put(static_cast<char>(b));
-			}
-			else {
-				std::string delim = "";
-				std::cout << std::hex << std::setfill('0');
-				if (use_block) {
-					std::cout << delim;
-					for (auto b : block_hash) std::cout << std::setw(2) << int(b);
-					delim = " ";
-				}
-				if (use_dct) {
-					std::cout << delim;
-					for (auto b : dct_hash) std::cout << std::setw(2) << int(b);
-					delim = " ";
-				}
-				
-				std::cout << "\n";
-			}
-		}
-		catch (...) {
-			std::cerr << "FAILED " << file << "\n";
-			ret = -1;
-		}
-	}
-	return ret;
-	
-}
-
 
 namespace imghash {
 
@@ -216,6 +97,31 @@ namespace imghash {
 		}
 	}
 
+	bool load(FILE* file, Image<float>& img, Preprocess& prep)
+	{
+		int c = fgetc(file);
+		if (c == EOF) return false;
+		ungetc(c, file);
+
+		if (test_ppm(file)) {
+			img = load_ppm(file, prep);
+			return true;
+		}
+	#ifdef USE_JPEG
+		else if (test_jpeg(file)) {
+			img = load_jpeg(file, prep);
+			return true;
+		}
+	#endif
+	#ifdef USE_PNG
+		else if (test_png(file)) {
+			img = load_png(file, prep);
+			return true;
+		}
+	#endif
+		throw std::runtime_error("Unsupported file format");
+	}
+
 	Image<float> load(const std::string& fname, Preprocess& prep)
 	{
 		FILE* file = fopen(fname.c_str(), "rb");
@@ -223,23 +129,12 @@ namespace imghash {
 			throw std::runtime_error("Failed to open file");
 		}
 		try {
-			if (test_ppm(file)) {
-				return load_ppm(file, prep);
-			}
-		#ifdef USE_JPEG
-			else if (test_jpeg(file)) {
-				return load_jpeg(file, prep);
-			}
-		#endif
-		#ifdef USE_PNG
-			else if (test_png(file)) {
-				return load_png(file, prep);
-			}
-		#endif
-			else {
-				throw std::runtime_error("Unsupported file format");
+			Image<float> img;
+			if (!load(file, img, prep)) {
+				throw std::runtime_error("Empty file");
 			}
 			fclose(file);
+			return img;
 		}
 		catch (std::exception& e) {
 			fclose(file);
@@ -257,6 +152,7 @@ namespace imghash {
 
 	Image<float> load_ppm(FILE* file, Preprocess& prep)
 	{
+		
 		// 1. Magic number
 		// 2. Whitespace
 		// 3. Width, ASCII decimal
@@ -308,7 +204,7 @@ namespace imghash {
 		//1. Magic number
 		fread(buffer, sizeof(char), 2, file);
 		if (buffer[0] != 'P' || buffer[1] != '6') {
-			throw std::runtime_error("PPM: Invalid file");
+			throw std::runtime_error(std::string("PPM: Invalid file (") + buffer + ")");
 		}
 
 		// 2. Whitespace or comment
@@ -675,4 +571,139 @@ namespace imghash {
 		return stop();
 	}
 
+}
+
+void print_hash(std::ostream& out, const std::vector<uint8_t>& hash, bool binary) {
+	if (binary) {
+		for (auto b : hash) out.put(static_cast<char>(b));
+	}
+	else {
+		out << std::hex << std::setfill('0');
+		for (auto b : hash) out << std::setw(2) << int(b);
+		out << "\n";
+	}
+}
+
+int main(int argc, const char* argv[])
+{
+	std::vector<std::string> files;
+	int dct_size = 1;
+	bool even = false;
+	bool debug = false;
+	bool use_dct = false;
+	bool binary = false;
+	for (size_t i = 1; i < argc; ++i) {
+		auto arg = std::string(argv[i]);
+		if (arg[0] == '-') {
+			if (arg == "-h" || arg == "--help") {
+				print_usage();
+				return 0;
+			}
+			else if (arg == "-v" || arg == "--version") {
+				print_version();
+				return 0;
+			}
+			else if (arg.substr(0, 2) == "-d") {
+				use_dct = even = true;
+				if (arg.size() > 2) {
+					auto size_str = arg.substr(2);
+					if (size_str.size() > 1 || !isdigit(size_str[0])) {
+						std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
+						print_usage();
+						return 1;
+					}
+					dct_size = static_cast<size_t>(atoi(size_str.c_str()));
+				}
+			}
+			else if (arg == "--dct") {
+				use_dct = even = true;
+				if (++i < argc) {
+					auto size_str = std::string(argv[i]);
+					if (size_str.size() > 1 || !isdigit(size_str[0])) {
+						std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
+						print_usage();
+						return 1;
+					}
+					dct_size = static_cast<size_t>(atoi(size_str.c_str()));
+				}
+				else {
+					std::cerr << "Missing dct size";
+					print_usage();
+					return 1;
+				}
+			}
+			else if (arg == "-x") binary = true;
+			else if (arg == "--debug") debug = true;
+			else {
+				std::cerr << "Unknown option: " << arg << "\n";
+				print_usage();
+				return 1;
+			}
+		}
+		else {
+			files.emplace_back(std::move(arg));
+		}
+	}
+
+	if (use_dct && (dct_size < 1 || dct_size > 4)) {
+		std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
+		print_usage();
+		return 1;
+	}
+
+	Preprocess prep(128, 128);
+
+	std::unique_ptr<Hash> hash;
+	if (use_dct) hash = std::make_unique<DCTHash>(8 * dct_size, even);
+	else hash = std::make_unique<BlockHash>();
+
+	int ret = 0;
+	if (files.empty()) {
+	#ifdef _WIN32
+		auto result = _setmode(_fileno(stdin), _O_BINARY);
+		if (result < 0) {
+			std::cerr << "Failed to open stdin in binary mode";
+			return 1;
+		}
+	#else
+		if (!freopen(nullptr, "rb", stdin)) {
+			std::cerr << "Failed to open stdin in binary mode";
+			return 1;
+		}
+	#endif
+		try {
+			Image<float> img;
+			while (load(stdin, img, prep)) {
+				print_hash(std::cout, hash->apply(img), binary);
+			}
+		}
+		catch (std::exception& e) {
+			std::cerr << "Exception while processing input:\n";
+			std::cerr << e.what();
+			ret = -1;
+		}
+		catch (...) {
+			std::cerr << "Unknown exception while processing input:\n";
+			ret = -1;
+		}
+	}
+	else {
+		for (const auto& file : files) {
+			try {
+				Image<float> img = load(file, prep);
+				if (debug) save(file + ".pgm", img, 1.0f);
+				print_hash(std::cout, hash->apply(img), binary);
+			}
+			catch (std::exception& e) {
+				std::cerr << "Exception while processing file: " << file << "\n";
+				std::cerr << e.what();
+				ret = -1;
+			}
+			catch (...) {
+				std::cerr << "Unknown exception while processing file: " << file << "\n";
+				ret = -1;
+			}
+		}
+	}
+	return ret;
 }
