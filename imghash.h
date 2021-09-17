@@ -292,6 +292,7 @@ namespace imghash {
 		void append_bit(bool b);
 	public:
 		Hash();
+		virtual ~Hash() {}
 		virtual std::vector<uint8_t> apply(const Image<float>& image) = 0;
 	};
 
