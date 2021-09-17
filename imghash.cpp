@@ -36,7 +36,7 @@ void print_usage() {
 	std::cout << "  OPTIONS are:\n";
 	std::cout << "    -h, --help : print this message and exit\n";
 	std::cout << "    -dN, --dct N: use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.\n";
-	std::cout << "    -x : binary output. Each hash is 8 bytes.\n";
+	std::cout << "    -x : binary output.\n";
 	std::cout << "  Supported file formats: \n";
 #ifdef USE_JPEG
 	std::cout << "    jpeg\n";
