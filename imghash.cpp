@@ -32,7 +32,7 @@ void print_usage() {
 	std::cout << "  Outputs hexadecimal hashes separated by spaces for each file on a new line.\n";
 	std::cout << "  The default algorithm (if -d is not specified) is a fixed size 64-bit block average hash, with mirror & flip tolerance.\n";
 	std::cout << "  The DCT hash uses only even-mode coefficients, so it is mirror/flip tolerant.\n";
-	std::cout << "  If no FILE is given, reads from stdin\n";
+	std::cout << "  If no FILE is given, reads ppm from stdin\n";
 	std::cout << "  OPTIONS are:\n";
 	std::cout << "    -h, --help : print this message and exit\n";
 	std::cout << "    -dN, --dct N: use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.\n";
@@ -97,31 +97,6 @@ namespace imghash {
 		}
 	}
 
-	bool load(FILE* file, Image<float>& img, Preprocess& prep)
-	{
-		int c = fgetc(file);
-		if (c == EOF) return false;
-		ungetc(c, file);
-
-		if (test_ppm(file)) {
-			img = load_ppm(file, prep);
-			return true;
-		}
-	#ifdef USE_JPEG
-		else if (test_jpeg(file)) {
-			img = load_jpeg(file, prep);
-			return true;
-		}
-	#endif
-	#ifdef USE_PNG
-		else if (test_png(file)) {
-			img = load_png(file, prep);
-			return true;
-		}
-	#endif
-		throw std::runtime_error("Unsupported file format");
-	}
-
 	Image<float> load(const std::string& fname, Preprocess& prep)
 	{
 		FILE* file = fopen(fname.c_str(), "rb");
@@ -130,8 +105,21 @@ namespace imghash {
 		}
 		try {
 			Image<float> img;
-			if (!load(file, img, prep)) {
-				throw std::runtime_error("Empty file");
+			if (test_ppm(file)) {
+				img = load_ppm(file, prep);
+			}
+		#ifdef USE_JPEG
+			else if (test_jpeg(file)) {
+				img = load_jpeg(file, prep);
+			}
+		#endif
+		#ifdef USE_PNG
+			else if (test_png(file)) {
+				img = load_png(file, prep);
+			}
+		#endif
+			else {
+				throw std::runtime_error("Unsupported file format");
 			}
 			fclose(file);
 			return img;
@@ -150,7 +138,7 @@ namespace imghash {
 		return (magic[0] == 'P') && (magic[1] == '6');
 	}
 
-	Image<float> load_ppm(FILE* file, Preprocess& prep)
+	Image<float> load_ppm(FILE* file, Preprocess& prep, bool empty_error)
 	{
 		
 		// 1. Magic number
@@ -202,7 +190,12 @@ namespace imghash {
 		};
 				
 		//1. Magic number
-		fread(buffer, sizeof(char), 2, file);
+		if (fread(buffer, sizeof(char), 2, file) == 0) {
+			//empty file / end of stream
+			if (empty_error) throw std::runtime_error("PPM: Empty file");
+			else return Image<float>();
+		}
+		
 		if (buffer[0] != 'P' || buffer[1] != '6') {
 			throw std::runtime_error(std::string("PPM: Invalid file (") + buffer + ")");
 		}
@@ -673,8 +666,10 @@ int main(int argc, const char* argv[])
 	#endif
 		try {
 			Image<float> img;
-			while (load(stdin, img, prep)) {
+			img = load_ppm(stdin, prep);
+			while (img.size > 0) {
 				print_hash(std::cout, hash->apply(img), binary);
+				img = load_ppm(stdin, prep, false); //it's OK to get an empty file here
 			}
 		}
 		catch (std::exception& e) {
