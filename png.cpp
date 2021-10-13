@@ -2,10 +2,6 @@
 
 #include "png.h"
 
-namespace {
-
-}
-
 namespace imghash {
 
 	bool test_png(FILE* file)

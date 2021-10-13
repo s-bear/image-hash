@@ -5,6 +5,7 @@
 
 #include <fstream>
 #include <cstdio>
+#include <bitset>
 
 #ifdef max
 #undef max
@@ -251,6 +252,19 @@ namespace imghash {
 			bytes.back() |= (uint8_t(1) << bi);
 		}
 		++bi;
+	}
+
+	uint32_t Hash::hamming_distance(const hash_type& h1, const hash_type& h2)
+	{
+		//TODO: use span to avoid copies
+		
+		//NB we only look at bytes in common
+		size_t n = std::min(h1.size(), h2.size());
+		size_t d = 0;
+		for (size_t i = 0; i < n; ++i) {
+			d += std::bitset<sizeof(hash_type::value_type)>(h1[i] ^ h2[i]).count();
+		}
+		return static_cast<uint32_t>(d);
 	}
 
 	std::vector<uint8_t> BlockHash::apply(const Image<float>& image)

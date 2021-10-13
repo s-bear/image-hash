@@ -284,8 +284,10 @@ namespace imghash {
 	//! Class for implementing image hash functions
 	class Hash
 	{
+	public:
+		typedef std::vector<uint8_t> hash_type;
 	protected:
-		std::vector<uint8_t> bytes;
+		hash_type bytes;
 		size_t bi;
 
 		void clear();
@@ -293,14 +295,16 @@ namespace imghash {
 	public:
 		Hash();
 		virtual ~Hash() {}
-		virtual std::vector<uint8_t> apply(const Image<float>& image) = 0;
+		virtual hash_type apply(const Image<float>& image) = 0;
+
+		static uint32_t hamming_distance(const hash_type& h1, const hash_type& h2);
 	};
 
 	//! Block-average hash
 	class BlockHash : public Hash
 	{
 	public:
-		std::vector<uint8_t> apply(const Image<float>& image);
+		hash_type apply(const Image<float>& image);
 	};
 
 	//! Discrete Cosine Transform hash
@@ -374,7 +378,7 @@ namespace imghash {
 		DCTHash(unsigned M, bool even);
 		
 		//! Apply the hash function
-		std::vector<uint8_t> apply(const Image<float>& image);
+		hash_type apply(const Image<float>& image);
 	};
 
 }
