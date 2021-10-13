@@ -281,7 +281,7 @@ namespace imghash {
 		Image<float> apply(const Image<uint8_t>& input);
 	};
 
-	
+	//! Class for implementing image hash functions
 	class Hash
 	{
 	protected:
@@ -296,13 +296,15 @@ namespace imghash {
 		virtual std::vector<uint8_t> apply(const Image<float>& image) = 0;
 	};
 
-	class BlockHash : virtual public Hash
+	//! Block-average hash
+	class BlockHash : public Hash
 	{
 	public:
 		std::vector<uint8_t> apply(const Image<float>& image);
 	};
 
-	class DCTHash : virtual public Hash
+	//! Discrete Cosine Transform hash
+	class DCTHash : public Hash
 	{
 	protected:
 		//! 1D Discrete Cosine Transform coefficient
@@ -334,6 +336,13 @@ namespace imghash {
 		*/
 		static std::vector<float> mat_even(unsigned N, unsigned M);
 
+		//! 1D Discrete Cosine Transform matrix
+		/*!
+		\param N The number of samples (pixels)
+		\param M The number of DCT rows, must be less than (N-1)/2 if even == true, less than N otherwise.
+		\param even If true, generate only even frequency coefficients
+		\return N*M DCT matrix coefficients, in column-major order. The DC coefficients are excluded
+		*/
 		static std::vector<float> mat(unsigned N, unsigned M, bool even);
 
 		bool even_;
@@ -343,7 +352,28 @@ namespace imghash {
 		
 	public:
 		DCTHash();
+
+		//! Construct a DCTHash object with M frequencies
+		/*!
+		This Hash transforms a square image using the Discrete Cosine Transform, producing MxM bits
+		of output. The DCT is computed over the full resolution of the image, and the resulting
+		coefficients are ordered independently of M. That is, hashes produced from the same image
+		with different values of M will have a common prefix. The ordering is by square shells,
+		reading down the next column before reading across the next row:
+
+		0 1 4 9
+		2 3 5 A
+		6 7 8 B
+		C D E F
+
+		Each bit of the hash corresponds to the sign of the DCT coefficients.
+
+		\param M The number of DCT components in the output
+		\param even If true, use only even frequencies, for a symmetrical hash (mirror/flip tolerant).
+		*/
 		DCTHash(unsigned M, bool even);
+		
+		//! Apply the hash function
 		std::vector<uint8_t> apply(const Image<float>& image);
 	};
 
