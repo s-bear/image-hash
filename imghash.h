@@ -297,7 +297,15 @@ namespace imghash {
 		virtual ~Hash() {}
 		virtual hash_type apply(const Image<float>& image) = 0;
 
+		//return true if the hashes are equal up to the length of the shorter hash
+		static bool match(const hash_type& h1, const hash_type& h2);
+		//return true if the hashes match and are the same length
+		static bool equal(const hash_type& h1, const hash_type& h2);
+		
+		//bitwise distance, up to the length of the shorter hash
 		static uint32_t hamming_distance(const hash_type& h1, const hash_type& h2);
+
+		static uint32_t distance(const hash_type& h1, const hash_type& h2);
 	};
 
 	//! Block-average hash

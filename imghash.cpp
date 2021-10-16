@@ -6,6 +6,7 @@
 #include <fstream>
 #include <cstdio>
 #include <bitset>
+#include <algorithm>
 
 #ifdef max
 #undef max
@@ -254,6 +255,17 @@ namespace imghash {
 		++bi;
 	}
 
+	bool Hash::equal(const hash_type& h1, const hash_type& h2)
+	{
+		return h1.size() == h2.size() && Hash::match(h1, h2);
+	}
+
+	bool Hash::match(const hash_type& h1, const hash_type& h2)
+	{
+		size_t n = std::min(h1.size(), h2.size());
+		return std::equal(h1.begin(), h1.begin() + n, h2.begin(), h2.begin() + n);
+	}
+
 	uint32_t Hash::hamming_distance(const hash_type& h1, const hash_type& h2)
 	{
 		//TODO: use span to avoid copies
@@ -265,6 +277,10 @@ namespace imghash {
 			d += std::bitset<sizeof(hash_type::value_type)>(h1[i] ^ h2[i]).count();
 		}
 		return static_cast<uint32_t>(d);
+	}
+	uint32_t Hash::distance(const hash_type& h1, const hash_type& h2)
+	{
+		return hamming_distance(h1, h2);
 	}
 
 	std::vector<uint8_t> BlockHash::apply(const Image<float>& image)
