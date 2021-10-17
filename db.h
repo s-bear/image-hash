@@ -2,7 +2,6 @@
 #pragma once
 #include "imghash.h"
 
-#include <cstdint>
 #include <string>
 #include <vector>
 #include <memory>
@@ -15,6 +14,7 @@ namespace imghash {
 	public:
 		
 		using point_type = Hash::hash_type;
+		using item_type = std::string;
 
 		//Open the database
 		Database(const std::string& path);
@@ -23,15 +23,17 @@ namespace imghash {
 		~Database();
 
 		//Add a file
-		void insert(const point_type& hash, const std::string& name);
+		void insert(const point_type& point, const item_type& data);
 
-		//Find similar images
-		void query(const point_type& hash, unsigned int dist);
+		//Find similar items
+		std::vector<item_type> query(const point_type& point, unsigned int dist, size_t limit = 10);
+
+
 
 		//Add a vantage point for querying
 		// NB this is expensive: it computes (and stores) the distance from the new
 		//  vantage point to every point already in the database
-		void add_vantage_point(const point_type& hash);
+		void add_vantage_point(const point_type& point);
 
 		//Find a point that would make a good vantage point
 		// this is a point that is far from all existing vantage points
