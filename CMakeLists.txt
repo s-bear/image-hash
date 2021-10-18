@@ -30,7 +30,7 @@ set(features "${features} PNG")
 endif()
 
 if(SQLiteCpp_FOUND)
-target_sources(imghash PUBLIC db.cpp)
+target_sources(imghash PUBLIC mvptable.cpp db.cpp)
 target_link_libraries(imghash PRIVATE SQLiteCpp)
 target_compile_definitions(imghash PRIVATE USE_SQLITE)
 set(features "${features} SQLITE")
