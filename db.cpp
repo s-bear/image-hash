@@ -5,6 +5,121 @@
 namespace imghash {
 	class Database::Impl {
 	protected:
+		using stmt_ptr = std::unique_ptr<SQLite::Statement>;
+
+		/* String constants */
+		static constexpr const char str_init_tables[] = {
+			//table sizes
+			"CREATE TABLE IF NOT EXISTS mvp_counts ("
+				"id INTEGER PRIMARY KEY,"
+				"points INTEGER,"
+				"vantange_points INTEGER,"
+				"parts INTEGER,"
+				"items INTEGER"
+			");"
+
+			"CREATE TABLE IF NOT EXISTS mvp_points ("
+				"id INTEGER PRIMARY KEY,"
+				"part INTEGER," // NB: not an index into mvp_parts, but rather computed from the data in that table
+				"value BLOB UNIQUE"
+			// "d0 INTEGER," etc are added later for each vantage_point with an ALTER TABLE
+			");"
+			"CREATE INDEX IF NOT EXISTS mvp_idx_points_part ON mvp_points(part);"
+
+			"CREATE TABLE IF NOT EXISTS mvp_vantage_points ("
+				"id INTEGER PRIMARY KEY,"
+				"value BLOB UNIQUE" // not necessarily in mvp_points
+			");"
+
+			"CREATE TABLE IF NOT EXISTS mvp_parts ("
+				"id INTEGER PRIMARY KEY,"
+				"vantage_point_id INTEGER,"
+				"upper_bound INTEGER,"
+				"count INTEGER," // how many points are within this partition shell (excluding the lower shells)
+				"FOREIGN KEY(vantage_point_id) REFERENCES mvp_vantage_points(id)"
+			");"
+
+			"CREATE TABLE temp.mvp_query ("
+				"id INTEGER PRIMARY KEY,"
+				"dist INTEGER" //distance to query point
+			");"
+			"CREATE INDEX temp.mvp_idx_query_dist ON temp.mvp_query(dist);"
+
+			"CREATE TABLE IF NOT EXISTS mvp_items ("
+				"id INTEGER PRIMARY KEY," //to index into another table holding item data
+				"point_id INTEGER," //multiple items may be associated with the same point
+				"FOREIGN KEY(point_id) REFERENCES mvp_points(id)"
+			");"
+			"CREATE INDEX IF NOT EXISTS mvp_idx_items_point ON mvp_items(point_id);"
+		};
+
+		static constexpr const char str_count_rows[] = 
+			"SELECT COUNT(1) FROM $table;";
+		
+		static constexpr const char str_ins_counts[] = 
+			"INSERT INTO mvp_counts(points,vantage_points,parts,items) VALUES($points,$vantage_points,$parts,$items)";
+		
+		static constexpr const char str_upd_count[] =
+			"UPDATE mvp_counts SET $col = $col + 1 WHERE id = 1;";
+
+		static constexpr const char str_sel_all_points[] = 
+			"SELECT id, value FROM mvp_points;";
+		
+		static constexpr const char str_sel_point_by_value[] = 
+			"SELECT id FROM mvp_points WHERE value = $value;";
+		
+		static constexpr const char str_upd_point[] = 
+			"UPDATE mvp_points SET $col = $value WHERE id = $id;";
+		
+		static constexpr const char str_add_points_col[] =
+			"ALTER TABLE mvp_points ADD COLUMN $col INTEGER DEFAULT 0x7FFFFFFF;" // max int32
+			"CREATE INDEX $idx ON mvp_points($col);";
+		
+		static constexpr const char str_sel_vp_ids[] = 
+			"SELECT id FROM mvp_vantage_points ORDER BY id ASC;";
+		
+		static constexpr const char str_sel_vps[] = 
+			"SELECT id, value FROM mvp_vantage_points ORDER BY id ASC;";
+		
+		static constexpr const char str_ins_vp[] = 
+			"INSERT INTO mvp_vantage_points(value) VALUES($value) RETURNING id;";
+		
+		static constexpr const char str_sel_parts[] = 
+			"SELECT vantage_point_id, upper_bound FROM mvp_parts ORDER BY vantage_point_id ASC, upper_bound ASC;";
+		
+		static constexpr const char str_del_query[] =
+			"DELETE FROM temp.mvp_query;";
+		
+		static constexpr const char str_ins_query[] =
+			"INSERT INTO temp.mvp_query(id, dist) VALUES($id, $dist);";
+
+		static constexpr const char str_ins_item[] =
+			"INSERT INTO mvp_items(point_id) VALUES($point_id) RETURNING id;";
+
+		static constexpr const char str_upd_item[] =
+			"UPDATE mvp_items SET point_id = $point_id WHERE id = $id;";
+
+		static constexpr const char str_sel_item_by_id[] =
+			"SELECT point_id FROM items WHERE id = $id;";
+
+		/* Cached compiled SQL statememts */
+		stmt_ptr count_rows; // $table: $table -> count
+		stmt_ptr ins_counts; // mvp_counts: $points,$vantage_points,$parts,$items ->
+		stmt_ptr upd_count; // mvp_counts: $col ->
+		stmt_ptr sel_all_points; // mvp_points: -> id, value
+		stmt_ptr sel_point_by_value; // mvp_points: $value -> id
+		stmt_ptr ins_point; // mvp_points: $part, $value, $d0, ... -> id
+		stmt_ptr upd_point; // mvp_points: $col, $value, $id ->
+		stmt_ptr add_points_col; // mvp_points: $col, $idx ->
+		stmt_ptr sel_vp_ids; // mvp_vantage_points: -> id
+		stmt_ptr sel_vps; // mvp_vantage_points: -> id, value
+		stmt_ptr ins_vp; // mvp_vantage_points: $value -> id
+		stmt_ptr sel_parts; // mvp_parts: -> vantage_point_id, upper_bound
+		stmt_ptr del_query; // mvp_query: ->
+		stmt_ptr ins_query; // mvp_query: $id, $dist ->
+		stmt_ptr ins_item; // mvp_items: $point_id -> id
+		stmt_ptr upd_item; // mvp_items: $point_id, $id ->
+		stmt_ptr sel_item_by_id; // mvp_items: $id -> point_id
 
 		/* SQL BLOB <-> point_type interface*/
 		
@@ -24,31 +139,18 @@ namespace imghash {
 		}
 
 		// Get the distance between two points
-		static uint32_t get_distance(const point_type& p1, const point_type& p2)
+		static int get_distance(const point_type& p1, const point_type& p2)
 		{
-			return Hash::distance(p1, p2);
-		}
-
-		static item_type get_item(SQLite::Column& col) {
-			return col.getString();
+			return static_cast<int>(Hash::distance(p1, p2)); //TODO: check distance < max int
 		}
 
 		//The database connection
 		SQLite::Database db;
 		
-		using stmt_ptr = std::unique_ptr<SQLite::Statement>;
-
-		//Cached statements
-		stmt_ptr insert_point, get_point_id_by_value, add_points_col, insert_file, update_file, get_file_by_path;
-		stmt_ptr get_all_point_values, insert_vantage_point, get_vantage_points, update_point;
-		stmt_ptr partition_points, clear_query, insert_query, get_files_by_query;
-
 		// Cached vantage-point IDs, for insert_point 
 		std::vector<int64_t> vp_ids_;
 
-		stmt_ptr get_count, increment_count;
-
-		stmt_ptr make_stmt(const std::string& stmt)
+		stmt_ptr make_stmt(const std::string stmt)
 		{
 			return std::make_unique<SQLite::Statement>(db, stmt);
 		}
@@ -93,65 +195,91 @@ namespace imghash {
 			return make_stmt(stmt);
 		}
 
+		int64_t do_count_rows(const std::string& table) {
+			count_rows->bind("table", table);
+			count_rows->reset();
+			if (count_rows->executeStep()) {
+				return count_rows->getColumn(0).getInt64();
+			}
+			else {
+				throw std::runtime_error("Error counting rows of table: " + table);
+			}
+		}
+
 		void init_tables()
 		{
 			SQLite::Transaction trans(db);
-			db.exec(
-				"CREATE TABLE IF NOT EXISTS counts ("
-					"id INTEGER PRIMARY KEY,"
-					"points INTEGER,"
-					"vantange_points INTEGER,"
-					"files INTEGER"
-				");"
+			db.exec(str_init_tables);
+			
+			count_rows = make_stmt(str_count_rows);
+			ins_counts = make_stmt(str_ins_counts);
+			sel_vp_ids = make_stmt(str_sel_vp_ids);
 
-				"CREATE TABLE IF NOT EXISTS points ("
-					"id INTEGER PRIMARY KEY,"
-					"value BLOB"
-				");"
+			//if counts is empty, initialize it
+			if (do_count_rows("mvp_counts") == 0) {
+				auto num_points = do_count_rows("mvp_points");
+				auto num_vantage_points = do_count_rows("mvp_vantage_points");
+				auto num_parts = do_count_rows("mvp_parts");
+				auto num_items = do_count_rows("mvp_items");
 
-				"CREATE UNIQUE INDEX IF NOT EXISTS idx_points_value ON points(value);"
-
-				"CREATE TABLE IF NOT EXISTS vantage_points ("
-					"id INTEGER PRIMARY KEY,"
-					"value BLOB UNIQUE"
-				");"
-
-				"CREATE TABLE temp.query ("
-					"id INTEGER PRIMARY KEY,"
-					"dist INTEGER"
-				");"
-				"CREATE INDEX temp.idx_query_dist ON temp.query(dist);"
-
-				"CREATE TABLE IF NOT EXISTS files ("
-					"path TEXT PRIMARY KEY,"
-					"pointid INTEGER,"
-					"FOREIGN KEY(pointid) REFERENCES points(id)"
-				") WITHOUT ROWID;"
-
-				"CREATE INDEX IF NOT EXISTS"
-					"idx_files_point ON files(pointid);"
-				");"
-			);
-			//if counts is empty, initialize it with a 
-			if (db.execAndGet("SELECT COUNT(1) FROM counts;").getInt64() == 0)
-			{
-				auto num_points = db.execAndGet("SELECT COUNT(1) FROM points;").getInt64();
-				auto num_vantage_points = db.execAndGet("SELECT COUNT(1) FROM vantage_points;").getInt64();
-				auto num_files = db.execAndGet("SELECT COUNT(2) FROM files;").getInt64();
-				auto insert_counts = make_stmt("INSERT INTO counts(points,vantage_points,files) VALUES(?, ?, ?);");
-				insert_counts->bind(1, num_points);
-				insert_counts->bind(2, num_vantage_points);
-				insert_counts->bind(3, num_files);
-				insert_counts->exec();
+				ins_counts->bind("points", num_points);
+				ins_counts->bind("vantage_points", num_vantage_points);
+				ins_counts->bind("parts", num_parts);
+				ins_counts->bind("items", num_items);
+				ins_counts->reset();
+				ins_counts->exec();
 			}
+			
 			//get all of the vantage point ids
 			std::vector<int64_t> vp_ids;
-			SQLite::Statement get_vp_ids(db, "SELECT id FROM vantage_points ORDER BY id ASC;");
-			while (get_vp_ids.executeStep()) {
-				vp_ids.push_back(get_vp_ids.getColumn(0).getInt64());
+			sel_vp_ids->reset();
+			while (sel_vp_ids->executeStep()) {
+				vp_ids.push_back(sel_vp_ids->getColumn(0).getInt64());
 			}
 			vp_ids_ = std::move(vp_ids);
 			trans.commit();
+		}
+
+		//get the distance from each vantage point to the given point
+		// calls update_vp_ids, which may invalidate certain statements
+		std::vector<int32_t> vp_dists_(const point_type& p_value)
+		{
+			//Calculate distances to each vantage point
+			std::vector<int64_t> vp_ids;
+			std::vector<int32_t> dists;
+			sel_vps->reset();
+			while (sel_vps->executeStep()) {
+				auto id = sel_vps->getColumn(0).getInt64(); //vantage point id
+				vp_ids.push_back(id);
+
+				auto vp_value = get_point_value(sel_vps->getColumn(1)); //vantage point value
+				uint32_t d = get_distance(vp_value, p_value);
+				dists.push_back(d);
+			}
+			update_vp_ids(vp_ids); //check to see if they changed since the last call
+			return dists;
+		}
+
+		//Find the partitions covered by a radius around a specific point
+		// the point is specified by its distance from each vantage point
+		std::vector<int64_t> find_parts_(const std::vector<int32_t>& dists, int32_t radius)
+		{
+			//get the shell bounds for each vantage point from the mvp_parts table
+			std::vector<std::vector<int32_t>> bounds;
+			int64_t prev_vp_id = -1;
+			sel_parts->reset();
+			while (sel_parts->executeStep()) {
+				int64_t vp_id = sel_parts->getColumn(0).getInt64();
+				int32_t upper_bound = sel_parts->getColumn(1).getInt();
+				if (vp_id != prev_vp_id) {
+					//handling a new vantage point
+					bounds.push_back(std::vector<int32_t>());
+					bounds.back().push_back(0); // 0 is the lowest bound -- this simplifies later logic
+				}
+				bounds.back().push_back(upper_bound);
+			}
+
+			return parts;
 		}
 
 		// Insert a point into points, if it doesn't already exist, returning the id
@@ -159,33 +287,19 @@ namespace imghash {
 		int64_t insert_point_(const point_type& p_value)
 		{
 			//is the point already in the database?
-			get_point_id_by_value->bind("value", get_point_data(p_value), get_point_size(p_value));
-
-			get_point_id_by_value->reset();
-			if (get_point_id_by_value->executeStep()) {
+			sel_point_by_value->bind("value", get_point_data(p_value), get_point_size(p_value));
+			sel_point_by_value->reset();
+			if (sel_point_by_value->executeStep()) {
 				//yes
-				return get_point_id_by_value->getColumn(0).getInt64();
+				return sel_point_by_value->getColumn(0).getInt64();
 			}
 			else {
 				//no: we need to add the point
 
-				//Calculate distances to each vantage point
-				std::vector<int64_t> vp_ids;
-				std::vector<uint32_t> dists;
-
-				get_vantage_points->reset();
-				while (get_vantage_points->executeStep()) {
-					auto id = get_vantage_points->getColumn(0).getInt64(); //vantage point id
-					vp_ids.push_back(id);
-
-					auto vp_value = get_point_value(get_vantage_points->getColumn(1)); //vantage point value
-					uint32_t d = get_distance(vp_value, p_value);
-					dists.push_back(d);
-				}
-				update_vp_ids(vp_ids); //check to see if they changed since the last call
+				auto vp_dists = vp_dists_(p_value);
 
 				//update the insert_point statement if vp_ids changed
-				if (!insert_point) insert_point = make_insert_point(vp_ids);
+				if (!insert_point) insert_point = make_insert_point(vp_ids_);
 
 				insert_point->bind(1, get_point_data(p_value), get_point_size(p_value));
 				for (size_t i = 0; i < dists.size(); ++i) {
@@ -292,26 +406,23 @@ namespace imghash {
 			init_tables();
 
 			//precompile statements
-			insert_point = make_insert_point(vp_ids_);
-			get_all_point_values = make_stmt("SELECT id, value FROM points;");
-			get_point_id_by_value = make_stmt("SELECT id FROM points WHERE value = $value;");
-			update_point = make_stmt("UPDATE points SET $col = $val WHERE id = $id;");
-
-			insert_vantage_point = make_stmt("INSERT INTO vantage_points(value) VALUES($value) RETURNING id;");
-			get_vantage_points = make_stmt("SELECT id, value FROM vantage_points ORDER BY id ASC;");
-			add_points_col = make_stmt("ALTER TABLE points ADD COLUMN $col INTEGER DEFAULT 0xFFFFFFFF; CREATE INDEX $idx ON points($col);");
-
-			partition_points = make_partition_points(vp_ids_);
-			clear_query = make_stmt("DELETE FROM temp.query;");
-			insert_query = make_stmt("INSERT INTO temp.query(id, dist) VALUES($id, $dist)");
-			get_files_by_query = make_stmt("SELECT path FROM files WHERE pointid = (SELECT id FROM temp.query ORDER BY dist LIMIT $limit);");
-
-			insert_file = make_stmt("INSERT INTO files(path, pointid) VALUES($path, $pointid);");
-			update_file = make_stmt("UPDATE files SET pointid = $pointid WHERE path = $path;");
-			get_file_by_path = make_stmt("SELECT pointid FROM files where path = $path;");
+			upd_count = make_stmt(str_upd_count);
 			
-			get_count = make_stmt("SELECT points, vantage_points, files FROM counts WHERE id = 1;");
-			increment_count = make_stmt("UPDATE counts SET $col = $col + 1 WHERE id = 1;");
+			sel_all_points = make_stmt(str_sel_all_points);
+			sel_point_by_value = make_stmt(str_sel_point_by_value);
+			upd_point = make_stmt(str_upd_point);
+			add_points_col = make_stmt(str_add_points_col);
+			
+			sel_vps = make_stmt(str_sel_vps);
+			ins_vp = make_stmt(str_ins_vp);
+			
+			sel_parts = make_stmt(str_sel_parts);
+			del_query = make_stmt(str_del_query);
+			ins_query = make_stmt(str_ins_query);
+
+			ins_item = make_stmt(str_ins_item);
+			upd_item = make_stmt(str_upd_item);
+			sel_item_by_id = make_stmt(str_sel_item_by_id);
 		}
 
 		
