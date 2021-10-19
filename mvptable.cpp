@@ -3,6 +3,56 @@
 #include <algorithm>
 
 
+// Construct, open or create the database
+MVPTable::MVPTable(std::shared_ptr<SQLite::Database> db) 
+	: db(db)
+{
+	//initialize database as necessary
+	db->exec(str_init_tables);
+
+	count_rows = make_stmt(str_count_rows);
+	ins_counts = make_stmt(str_ins_counts);
+	sel_vp_ids = make_stmt(str_sel_vp_ids);
+	sel_count = make_stmt(str_sel_count);
+
+	//if counts is empty, initialize it
+	if (exec_count_rows("mvp_counts") == 0) {
+		auto num_points = exec_count_rows("mvp_points");
+		auto num_vantage_points = exec_count_rows("mvp_vantage_points");
+		auto num_items = exec_count_rows("mvp_items");
+
+		ins_counts->bind("points", num_points);
+		ins_counts->bind("vantage_points", num_vantage_points);
+		ins_counts->bind("items", num_items);
+		ins_counts->reset();
+		ins_counts->exec();
+	}
+
+	//get all of the vantage point ids
+	std::vector<int64_t> vp_ids;
+	sel_vp_ids->reset();
+	while (sel_vp_ids->executeStep()) {
+		vp_ids.push_back(sel_vp_ids->getColumn(0).getInt64());
+	}
+	vp_ids_ = std::move(vp_ids);
+
+	//precompile more statements
+	increment_count = make_stmt(str_increment_count);
+
+	ins_point = make_stmt(str_ins_point(vp_ids_));
+	sel_all_points = make_stmt(str_sel_all_points);
+	sel_point_by_value = make_stmt(str_sel_point_by_value);
+	upd_point = make_stmt(str_upd_point);
+	add_points_col = make_stmt(str_add_points_col);
+
+	sel_vps = make_stmt(str_sel_vps);
+	ins_vp = make_stmt(str_ins_vp);
+	increment_vp_count = make_stmt(str_increment_vp_count);
+
+	del_query = make_stmt(str_del_query);
+	ins_query = make_stmt(str_ins_query);
+}
+
 const std::string MVPTable::str_ins_point(const std::vector<int64_t>& vp_ids) {
 	std::string stmt1 = "INSERT INTO mvp_points(part, value";
 	std::string stmt2 = ") VALUES ($part, $value";
@@ -45,10 +95,33 @@ int64_t MVPTable::exec_count_rows(const std::string& table) {
 	}
 }
 
+int64_t MVPTable::exec_sel_count(const std::string& table) {
+	sel_count->bind("col", table);
+	sel_count->reset();
+	if (sel_count->executeStep()) {
+		return sel_count->getColumn(0).getInt64();
+	}
+	else {
+		throw std::runtime_error("Error getting cached row count: " + table);
+	}
+}
+
 void MVPTable::exec_increment_count(const std::string& table) {
 	increment_count->bind("col", table);
 	increment_count->reset();
 	increment_count->exec();
+}
+
+namespace {
+	inline bool in_bounds(int32_t d, int32_t radius, int32_t low)
+	{
+		// ( [ )  or [ ( )
+		return d + radius >= low; //TODO: overflow
+	}
+	inline bool in_bounds(int32_t d, int32_t radius, int32_t low, int32_t high)
+	{
+		return d + radius >= low && d - radius < high;
+	}
 }
 
 int64_t MVPTable::insert_point(const blob_type& p_value)
@@ -67,7 +140,6 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 		// and calculating which parition p_value falls into
 		std::vector<int64_t> vp_ids;
 		std::vector<int32_t> dists;
-		std::vector<int> shells;
 		int64_t part = 0;
 		sel_vps->reset();
 		while (sel_vps->executeStep()) {
@@ -78,29 +150,29 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 			auto vp_value = get_blob(sel_vps->getColumn("value"));
 
 			vp_ids.push_back(id);
-			uint32_t d = get_distance(vp_value, p_value);
+			uint32_t d = distance(vp_value, p_value);
 			dists.push_back(d);
 			//which shell around the vantage point does this point fall into
 			// also prepare the increment_vp_count statement for incrementing the occupancy count of that shell
 			increment_vp_count->bind("id", id);
 			int64_t shell = -1;
-			if (d >= bounds_3) {
+			if (in_bounds(d, 0, bounds_3)) {
 				shell = 3;
 				increment_vp_count->bind("col", "count_3");
 			}
-			else if (d >= bounds_2) {
+			else if (in_bounds(d, 0, bounds_2, bounds_3)) {
 				shell = 2;
 				increment_vp_count->bind("col", "count_2");
 			}
-			else if (d >= bounds_1) {
+			else if (in_bounds(d, 0, bounds_1, bounds_2)) {
 				shell = 1;
 				increment_vp_count->bind("col", "count_1");
 			}
-			else if (d >= 0) {
+			else if (in_bounds(d, 0, 0, bounds_1)) {
 				shell = 0;
 				increment_vp_count->bind("col", "count_0");
 			}
-			if (shell < 0) {
+			else {
 				throw std::runtime_error("Error inserting point: invalid distance");
 			}
 
@@ -109,7 +181,11 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 			increment_vp_count->exec();
 
 			//calculate the partition
-			part = 4 * part + shell; //there are at most 4 shells per vantage point
+			//each vp has 4 shells, so we index by multiples of 4 based on the vp's id
+			// that is, each vp gets [4*id, 4*id + 3] to store its shell
+			// we index by shell in reverse order because by default (before partitioning) all of the
+			// points fall in shell 3, so this way adding a new vantage point doesn't require repartitioning
+			part += (3-shell)*4*id;
 		}
 
 		//update the insert_point statement if vp_ids changed
@@ -132,216 +208,128 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 	}
 }
 
-int64_t MVPTable::insert_item(int64_t point_id)
-{
-	ins_item->bind("point_id", point_id);
-	ins_item->reset();
-	if (ins_item->executeStep()) {
-		exec_increment_count("items");
-		return ins_item->getColumn(0).getInt64();
-	}
-	else {
-		throw std::runtime_error("Error inserting item");
-	}
-}
-
 int64_t MVPTable::insert_vantage_point(const blob_type& vp_value)
 {
 	// Inserting a vantage point:
-	//   adds a new column of distances to mvp_points
-	//   repartitions mvp_points (mvp_points column part)
 	//   adds a new row to mvp_vantage_points
+	//   adds a new column of distances to mvp_points
+	//   calculate the distance from the vantage point to each point
 
+	//1. add the new row to mvp_vantage_points and get the new vp's id
+	// by default, the bounds are all 0, so all of the points will fall into shell 3
+	// so count_3 needs to be set to the total number of points
+	// the way parition indexing works, adding the new vantage point does not require
+	// updating any existing partitions
+	int64_t point_count = exec_sel_count("points");
+
+	int64_t vp_id;
+	ins_vp->bind("count_3", point_count);
 	ins_vp->bind("value", vp_value.data(), vp_value.size());
-	insert_vantage_point->reset();
-	if (insert_vantage_point->executeStep()) {
-		increment_count->bind("col", "vantage_points");
-		increment_count->reset();
-		increment_count->exec();
-
-		return insert_vantage_point->getColumn(0).getInt64();
+	ins_vp->reset();
+	if (ins_vp->executeStep()) {
+		exec_increment_count("vantage_points");
+		vp_id = ins_vp->getColumn("id").getInt64();
 	}
 	else {
 		throw std::runtime_error("Error inserting new vantage_point");
 	}
-}
 
-// Add a new column to points for the given vantage_point
-//  The new column is named "d{vp_id}" and will be populated by get_distance(vp_value, points.value)
-// No transaction
-void add_points_column_(int64_t vp_id, const point_type& vp_value)
-{
+	//2. add the new column of distances to mvp_points
+
 	std::string col_name = "d" + std::to_string(vp_id);
 
 	add_points_col->bind("col", col_name);
-	add_points_col->bind("idx", "idx_" + col_name);
+	add_points_col->bind("idx", "mvp_idx_" + col_name);
 	add_points_col->reset();
 	add_points_col->exec();
 
-	// we need to compute the distance from the new vantage point to all of the existing points
-	update_point->bind("col", col_name);
+	//3. compute the distance from the new vantage point to all of the existing points (and store)
+	upd_point->bind("col", col_name);
 
-	get_all_point_values->reset();
-	while (get_all_point_values->executeStep()) {
-		auto id = get_all_point_values->getColumn(0).getInt64();
-		auto p_value = get_point_value(get_all_point_values->getColumn(1));
+	sel_all_points->reset();
+	while (sel_all_points->executeStep()) {
+		auto id = sel_all_points->getColumn("id").getInt64();
+		auto p_value = get_blob(sel_all_points->getColumn("value"));
 
-		uint32_t d = get_distance(vp_value, p_value);
-		update_point->bind("id", id);
-		update_point->bind("val", d);
-		update_point->reset();
-		update_point->exec();
+		uint32_t d = distance(vp_value, p_value);
+		upd_point->bind("id", id);
+		upd_point->bind("value", d);
+		upd_point->reset();
+		upd_point->exec();
 	}
 }
 
-public:
-// Construct, open or create the database
-Impl(const std::string& path)
-	: db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE)
+std::vector<int64_t> MVPTable::query(const blob_type& q_value, uint32_t radius, int64_t limit)
 {
-	//initialize database as necessary
-	SQLite::Transaction trans(db);
-	db.exec(str_init_tables);
-
-	count_rows = make_stmt(str_count_rows);
-	ins_counts = make_stmt(str_ins_counts);
-	sel_vp_ids = make_stmt(str_sel_vp_ids);
-
-	//if counts is empty, initialize it
-	if (do_count_rows("mvp_counts") == 0) {
-		auto num_points = do_count_rows("mvp_points");
-		auto num_vantage_points = do_count_rows("mvp_vantage_points");
-		auto num_items = do_count_rows("mvp_items");
-
-		ins_counts->bind("points", num_points);
-		ins_counts->bind("vantage_points", num_vantage_points);
-		ins_counts->bind("items", num_items);
-		ins_counts->reset();
-		ins_counts->exec();
-	}
-
-	//get all of the vantage point ids
+	// Get the distance from the query point to each vantage point
+	// and get the parititions that the query covers
 	std::vector<int64_t> vp_ids;
-	sel_vp_ids->reset();
-	while (sel_vp_ids->executeStep()) {
-		vp_ids.push_back(sel_vp_ids->getColumn(0).getInt64());
-	}
-	vp_ids_ = std::move(vp_ids);
-	trans.commit();
+	std::vector<int32_t> dists;
+	std::vector<int64_t> parts;
+	parts.push_back(0);
+	sel_vps->reset();
+	while (sel_vps->executeStep()) {
+		auto id = sel_vps->getColumn("id").getInt64();
+		int32_t bounds_1 = sel_vps->getColumn("bounds_1").getInt();
+		int32_t bounds_2 = sel_vps->getColumn("bounds_2").getInt();
+		int32_t bounds_3 = sel_vps->getColumn("bounds_3").getInt();
+		auto vp_value = get_blob(sel_vps->getColumn("value"));
 
-	//precompile statements
-	increment_count = make_stmt(str_increment_count);
-
-	ins_point = make_stmt(str_ins_point(vp_ids_));
-	sel_all_points = make_stmt(str_sel_all_points);
-	sel_point_by_value = make_stmt(str_sel_point_by_value);
-	upd_point = make_stmt(str_upd_point);
-	add_points_col = make_stmt(str_add_points_col);
-
-	sel_vps = make_stmt(str_sel_vps);
-	ins_vp = make_stmt(str_ins_vp);
-	increment_vp_count = make_stmt(str_increment_vp_count);
-
-	del_query = make_stmt(str_del_query);
-	ins_query = make_stmt(str_ins_query);
-
-	ins_item = make_stmt(str_ins_item);
-	upd_item = make_stmt(str_upd_item);
-	sel_item_by_id = make_stmt(str_sel_item_by_id);
-}
-
-
-// Insert a (point, item) pair
-//  Multiple items may be associated with the same point
-//  If the point is new, its distance to all existing vantage points will be computed and stored
-void insert(const point_type& p_value, const item_type& item)
-{
-	SQLite::Transaction trans(db);
-	auto point_id = insert_point_(p_value);
-	insert_item_(point_id, item);
-	trans.commit();
-}
-
-void add_vantage_point(const point_type& vp_value)
-{
-	SQLite::Transaction trans(db);
-
-	auto vp_id = insert_vantage_point_(vp_value);
-	add_points_column_(vp_id, vp_value);
-
-	trans.commit();
-}
-
-std::vector<item_type> query(const point_type& pt, unsigned int radius, int64_t limit)
-{
-	//we need the distance from each vantage point to pt
-	SQLite::Transaction trans(db);
-
-	std::vector<int64_t> vp_ids;
-	std::vector<uint32_t> lower_bounds, upper_bounds;
-	get_vantage_points->reset();
-	while (get_vantage_points->executeStep()) {
-		auto id = get_vantage_points->getColumn(0).getInt64(); //vantage point id
 		vp_ids.push_back(id);
+		uint32_t d = distance(vp_value, q_value);
+		dists.push_back(d);
 
-		auto vp_value = get_point_value(get_vantage_points->getColumn(1)); //vantage point value
-		//get the distance
-		uint32_t d = get_distance(vp_value, pt);
-		lower_bounds.push_back(d <= radius ? 0 : d - radius);
-		upper_bounds.push_back(d >= 0xFFFFFFFF - radius ? 0xFFFFFFFF : d + radius);
+		std::vector<int> shells;
+		if (in_bounds(d, 0, bounds_3)) {
+			shells.push_back(3);
+		}
+		else if (in_bounds(d, 0, bounds_2, bounds_3)) {
+			shells.push_back(2);
+		}
+		else if (in_bounds(d, 0, bounds_1, bounds_2)) {
+			shells.push_back(1);
+		}
+		else if (in_bounds(d, 0, 0, bounds_1)) {
+			shells.push_back(0);
+		}
+		else {
+			throw std::runtime_error("Error inserting point: invalid distance");
+		}
+
+		if (shells.size() == 1) {
+			//a single shell -- we can modify the existing partitions in place
+			for (auto& p : parts) {
+				p += (3 - shells[0]) * 4 * id;
+			}
+		}
+		else {
+			//multple shells -- the number of partitions the query covers will grow
+			std::vector<int64_t> new_parts;
+			new_parts.reserve(parts.size() * shells.size());
+			for (auto p : parts) {
+				for (auto s : shells) {
+					new_parts.push_back(p + (3 - s) * 4 * id);
+				}
+			}
+			parts = std::move(new_parts);
+		}
 	}
+	
 	update_vp_ids(vp_ids);
-	//we get all of the point within the lower and upper bounds using parition_points
-	// for each, we compute the distance from the query point to it, and store
-	// the result in the temp.query table
-	clear_query->reset();
-	clear_query->exec();
 
-	if (!partition_points) partition_points = make_partition_points(vp_ids);
+	// get all of the points in the covered partitions
+	// then we can evaluate the distance from the remaining points to the query point
 
-	for (size_t i = 0; i < vp_ids.size(); ++i) {
-		partition_points->bind(2 * i + 1, lower_bounds[i]);
-		partition_points->bind(2 * i + 2, upper_bounds[i]);
-	}
-
-	partition_points->reset();
-	while (partition_points->executeStep()) {
-		auto id = partition_points->getColumn(0).getInt64();
-		auto value = get_point_value(partition_points->getColumn(1));
-
-		uint32_t d = get_distance(pt, value);
-
-		insert_query->bind("id", id);
-		insert_query->bind("dist", d);
-		insert_query->reset();
-		insert_query->exec();
-	}
-
-	std::vector<item_type> result;
-	get_files_by_query->bind("limit", limit);
-	get_files_by_query->reset();
-	while (get_files_by_query->executeStep()) {
-		result.push_back(get_item(get_files_by_query->getColumn(0)));
-	}
-
-	trans.commit();
+	// TODO
+	
 
 	return result;
 }
 
-point_type find_vantage_point(size_t sample_size)
+MVPTable::blob_type MVPTable::find_vantage_point(size_t sample_size)
 {
-	SQLite::Transaction trans(db);
-
 	// do we have any vantage points yet?
-	int64_t num_vantage_points = -1;
-	get_count->reset();
-	if (get_count->executeStep()) {
-		num_vantage_points = get_count->getColumn(1).getInt64();
-	}
-	else {
-		throw std::runtime_error("Error reading number of vantage points");
-	}
+	int64_t num_vantage_points = exec_sel_count("vantage_points");
 
 	if (num_vantage_points > 0) {
 		//we need to find a point that's far from all of the existing vantage points
@@ -350,6 +338,4 @@ point_type find_vantage_point(size_t sample_size)
 	else {
 		//we need to find a point that's far from all other points
 	}
-
-	trans.commit();
 }
