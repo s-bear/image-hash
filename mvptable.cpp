@@ -533,6 +533,8 @@ MVPTable::blob_type MVPTable::find_vantage_point(size_t sample_size)
 		}
 		else {
 			//subsample the points, then do the pairwise distance between them
+			// NB this method of sampling is not very efficient -- it still touches all of the points
+			// TODO: more efficient random sampling?
 			stmt = "WITH sampled_points AS (SELECT value FROM mvp_points ORDER BY random() LIMIT $sample_size) "
 				"SELECT value FROM ("
 				"SELECT p.value AS value, sum(mvp_distance(p.value, q.value)) AS sum_dist"
