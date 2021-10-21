@@ -7,11 +7,11 @@
 namespace {
 	
 	//this bit of code happens often enough that it's worth factoring out
-	inline SQLite::Column exec_get(MVPTable::stmt_ptr stmt, int col)
+	inline SQLite::Column exec_get(SQLite::Statement& stmt, int col)
 	{
-		stmt->reset();
-		if (stmt->executeStep()) {
-			return stmt->getColumn(col);
+		stmt.reset();
+		if (stmt.executeStep()) {
+			return stmt.getColumn(col);
 		}
 		else {
 			throw std::runtime_error("Error executing statement");
@@ -28,63 +28,99 @@ namespace {
 	}
 }
 
+//access cached statements
+SQLite::Statement& MVPTable::get_stmt(const std::string& stmt)
+{
+	// look up stmt in the cache
+	// if it doesn't exist yet, construct a new statement with (*db, stmt)
+	// returns pair<iterator, bool> pointing to the item, and true if the new item was inserted
+	auto res = stmt_cache_.try_emplace(stmt, *db, stmt);
+	return res.first->second;
+}
+
+void MVPTable::check_db() {
+	if (db == nullptr) throw std::runtime_error("No database connection");
+}
+
+MVPTable::MVPTable()
+	: db(nullptr), dist_fn_()
+{
+	//nothing else to do
+}
 
 // Construct, open or create the database
 MVPTable::MVPTable(std::shared_ptr<SQLite::Database> db, std::function<distance_fn> dist_fn) 
 	: db(db), dist_fn_(dist_fn)
 {
+	if (db == nullptr) return;
 	//initialize database as necessary
-	db->exec(str_init_tables);
+	db->exec(
+		"CREATE TABLE IF NOT EXISTS mvp_counts ("
+			"id INTEGER PRIMARY KEY,"
+			"points INTEGER,"
+			"vantange_points INTEGER"
+		");"
+
+		"CREATE TABLE IF NOT EXISTS mvp_points ("
+			"id INTEGER PRIMARY KEY,"
+			//The partition is based on mvp_vantage_points bound_0,1,2,3
+			//  partition = sum( 4*id*shell(value, id)) for id in mvp_vantage_points)
+			//  shell(value, id) is the index of which shell around the vantage point the value falls in
+			"partition INTEGER,"
+			"value BLOB UNIQUE"
+			// "d0 INTEGER," etc are added later for each vantage_point with an ALTER TABLE
+		");"
+		"CREATE INDEX IF NOT EXISTS mvp_idx_points_part ON mvp_points(partition);"
+
+		"CREATE TABLE IF NOT EXISTS mvp_vantage_points ("
+			"id INTEGER PRIMARY KEY,"
+			//bound_0 is always 0
+			"bound_1 INTEGER DEFAULT 0,"
+			"bound_2 INTEGER DEFAULT 0,"
+			"bound_3 INTEGER DEFAULT 0,"
+			"count_0 INTEGER DEFAULT 0," //number of points in shell 0 (0 <= d < bound_1 )
+			"count_1 INTEGER DEFAULT 0," //number of points in shell 1 (bound_1 <= d < bound_2)
+			"count_2 INTEGER DEFAULT 0," //number of points in shell 2 (bound_2 <= d < bound_3)
+			"count_3 INTEGER," //number of points in shell 3 (bound_3 <= d )
+			"value BLOB UNIQUE" // not necessarily in mvp_points
+		");"
+
+		"CREATE TABLE temp.mvp_query ("
+			"id INTEGER PRIMARY KEY,"
+			"dist INTEGER" //distance to query point
+		");"
+		"CREATE INDEX temp.mvp_idx_query_dist ON temp.mvp_query(dist);"
+	);
 
 	db->createFunction("mvp_distance", 2, true, this, MVPTable::sql_distance);
-	db->createFunction("mvp_shell_r", 4, true, this, MVPTable::sql_shell_r);
 
-	count_rows = make_stmt(str_count_rows);
-	ins_counts = make_stmt(str_ins_counts);
-	sel_vp_ids = make_stmt(str_sel_vp_ids);
-	sel_count = make_stmt(str_sel_count);
-
+	auto& count_rows = get_stmt("SELECT COUNT(1) FROM $table;");
+	auto& ins_counts = get_stmt("INSERT INTO mvp_counts(points,vantage_points)"
+									"VALUES($points,$vantage_points)");
+	
 	//if counts is empty, initialize it
-	count_rows->bind("table", "mvp_counts");
-	if (exec_get_int64(count_rows) == 0) {
-		count_rows->bind("table", "mvp_points");
+	count_rows.bind("table", "mvp_counts");
+	if (exec_get(count_rows,0).getInt64() == 0) {
+		count_rows.bind("table", "mvp_points");
 		auto num_points = exec_get(count_rows, 0).getInt64();
 
-		count_rows->bind("table", "mvp_vantage_points");
+		count_rows.bind("table", "mvp_vantage_points");
 		auto num_vantage_points = exec_get(count_rows, 0).getInt64();
 		
-		ins_counts->bind("points", num_points);
-		ins_counts->bind("vantage_points", num_vantage_points);
-		ins_counts->reset();
-		ins_counts->exec();
+		ins_counts.bind("points", num_points);
+		ins_counts.bind("vantage_points", num_vantage_points);
+		ins_counts.reset();
+		ins_counts.exec();
 	}
 
+	auto& sel_vp_ids = get_stmt("SELECT id FROM mvp_vantage_points ORDER BY id ASC;");
 	//get all of the vantage point ids
 	std::vector<int64_t> vp_ids;
-	sel_vp_ids->reset();
-	while (sel_vp_ids->executeStep()) {
-		vp_ids.push_back(sel_vp_ids->getColumn(0).getInt64());
+	sel_vp_ids.reset();
+	while (sel_vp_ids.executeStep()) {
+		vp_ids.push_back(sel_vp_ids.getColumn(0).getInt64());
 	}
-	vp_ids_ = std::move(vp_ids);
-
-	//precompile more statements
-	increment_count = make_stmt(str_increment_count);
-
-	ins_point = make_stmt(str_ins_point(vp_ids_));
-	sel_all_points = make_stmt(str_sel_all_points);
-	sel_point_by_value = make_stmt(str_sel_point_by_value);
-	sel_point_by_rank = make_stmt(str_sel_point_by_rank);
-	upd_point = make_stmt(str_upd_point);
-	add_points_col = make_stmt(str_add_points_col);
-
-	sel_vps = make_stmt(str_sel_vps);
-	ins_vp = make_stmt(str_ins_vp);
-	increment_vp_count = make_stmt(str_increment_vp_count);
-	upd_vp = make_stmt(str_upd_vp);
-
-	del_query = make_stmt(str_del_query);
-	ins_query = make_stmt(str_ins_query(vp_ids));
-	sel_query = make_stmt(str_sel_query);
+	update_vp_ids(vp_ids);
 }
 
 void MVPTable::sql_distance(sqlite3_context* ctx, int n, sqlite3_value* args[])
@@ -98,28 +134,6 @@ void MVPTable::sql_distance(sqlite3_context* ctx, int n, sqlite3_value* args[])
 	auto p2 = get_blob(args[1]);
 	auto d = mvp_table->dist_fn_(p1, p2);
 	sqlite3_result_int(ctx, d);
-}
-
-void MVPTable::sql_shell_r(sqlite3_context* ctx, int n, sqlite3_value* args[])
-{
-	if (n != 4) {
-		sqlite3_result_error(ctx, "mvp_shell requires 4 args.", -1);
-		return;
-	}
-	auto bound_1 = sqlite3_value_int(args[0]);
-	auto bound_2 = sqlite3_value_int(args[1]);
-	auto bound_3 = sqlite3_value_int(args[2]);
-	auto d = sqlite3_value_int(args[3]);
-	int shell;
-	if (in_bounds(d, 0, bound_3)) shell = 3;
-	else if (in_bounds(d, 0, bound_2, bound_3)) shell = 2;
-	else if (in_bounds(d, 0, bound_1, bound_2)) shell = 1;
-	else if (in_bounds(d, 0, 0, bound_1)) shell = 0;
-	else {
-		sqlite3_result_error(ctx, "mvp_shell distance error", -1);
-		return;
-	}
-	sqlite3_result_int(ctx, 3 - shell);
 }
 
 const std::string MVPTable::str_ins_point(const std::vector<int64_t>& vp_ids) {
@@ -161,82 +175,83 @@ MVPTable::blob_type MVPTable::get_blob(SQLite::Column& col)
 	return blob_type(data, data + n);
 }
 
-MVPTable::stmt_ptr MVPTable::make_stmt(const std::string stmt)
-{
-	if (db == nullptr) throw std::runtime_error("No database connection");
-	return std::make_unique<SQLite::Statement>(*db, stmt);
-}
-
 void MVPTable::update_vp_ids(const std::vector<int64_t>& vp_ids)
 {
 	if (!std::equal(vp_ids_.begin(), vp_ids_.end(), vp_ids.begin(), vp_ids.end())) {
+		ins_point = std::make_unique<SQLite::Statement>(*db, str_ins_point(vp_ids));
+		ins_query = std::make_unique<SQLite::Statement>(*db, str_ins_query(vp_ids));
 		vp_ids_ = vp_ids;
-		ins_point.reset();
 	}
 }
 
 void MVPTable::exec_increment_count(const std::string& table) {
-	increment_count->bind("col", table);
-	increment_count->reset();
-	increment_count->exec();
+	auto& stmt = get_stmt("UPDATE mvp_counts SET $table = $table + 1 WHERE id = 1;");
+	stmt.bind("table", table);
+	stmt.reset();
+	stmt.exec();
 }
-
 
 int64_t MVPTable::insert_point(const blob_type& p_value)
 {
+	check_db();
+
+	auto& sel_pt = get_stmt("SELECT id FROM mvp_points WHERE value = $value;");
 	//is the point already in the database?
-	sel_point_by_value->bind("value", p_value.data(), p_value.size());
-	sel_point_by_value->reset();
-	if (sel_point_by_value->executeStep()) {
+	sel_pt.bind("value", p_value.data(), p_value.size());
+	sel_pt.reset();
+	if (sel_pt.executeStep()) {
 		//yes
-		return sel_point_by_value->getColumn(0).getInt64();
+		return sel_pt.getColumn(0).getInt64();
 	}
 	else {
 		//no: we need to add the point
 
-		//iterate over the vantage points, calculating the distance from each to p_value
-		// and calculating which parition p_value falls into
+		//iterate over the vantage points
+		//   calculating the distance from each to p_value (dist)
+		//   and which parition p_value falls into (shell)
+
+		auto& sel_vps = get_stmt(
+			"SELECT"
+				"id,"
+				"mvp_distance(value, $pt) AS dist,"
+				"CASE "
+					"WHEN dist >= bound_3 THEN 3 "
+					"WHEN dist >= bound_2 THEN 2 "
+					"WHEN dist >= bound_1 THEN 1 "
+					"ELSE 0 "
+				"END AS shell "
+			"FROM mvp_vantage_points ORDER BY id ASC;"
+		);
+
+		auto& inc_vp_count = get_stmt(
+			"UPDATE mvp_vantage_points SET $count = $count + 1 WHERE id = $id"
+		);
+
 		std::vector<int64_t> vp_ids;
 		std::vector<int32_t> dists;
 		int64_t part = 0;
-		sel_vps->reset();
-		while (sel_vps->executeStep()) {
-			auto id = sel_vps->getColumn("id").getInt64();
-			int32_t bound_1 = sel_vps->getColumn("bound_1").getInt();
-			int32_t bound_2 = sel_vps->getColumn("bound_2").getInt();
-			int32_t bound_3 = sel_vps->getColumn("bound_3").getInt();
-			auto vp_value = get_blob(sel_vps->getColumn("value"));
+		sel_vps.bind("pt", p_value.data(), static_cast<int>(p_value.size()));
+		sel_vps.reset();
+		while (sel_vps.executeStep()) {
+			auto id = sel_vps.getColumn("id").getInt64();
+			auto dist = sel_vps.getColumn("dist").getInt();
+			auto shell = sel_vps.getColumn("shell").getInt();
 
 			vp_ids.push_back(id);
-			uint32_t d = distance(vp_value, p_value);
-			dists.push_back(d);
+			dists.push_back(dist);
+
 			//which shell around the vantage point does this point fall into
 			// also prepare the increment_vp_count statement for incrementing the occupancy count of that shell
-			increment_vp_count->bind("id", id);
-			int64_t shell = -1;
-			if (in_bounds(d, 0, bound_3)) {
-				shell = 3;
-				increment_vp_count->bind("col", "count_3");
-			}
-			else if (in_bounds(d, 0, bound_2, bound_3)) {
-				shell = 2;
-				increment_vp_count->bind("col", "count_2");
-			}
-			else if (in_bounds(d, 0, bound_1, bound_2)) {
-				shell = 1;
-				increment_vp_count->bind("col", "count_1");
-			}
-			else if (in_bounds(d, 0, 0, bound_1)) {
-				shell = 0;
-				increment_vp_count->bind("col", "count_0");
-			}
+			inc_vp_count.bind("id", id);
+			if (shell == 3) inc_vp_count.bind("count", "count_3");
+			else if (shell == 2) inc_vp_count.bind("count", "count_2");
+			else if (shell == 1) inc_vp_count.bind("count", "count_1");
+			else if (shell == 0) inc_vp_count.bind("count", "count_0");
 			else {
-				throw std::runtime_error("Error inserting point: invalid distance");
+				throw std::runtime_error("Error inserting point: invalid shell");
 			}
-
-			//increment the count for that shell
-			increment_vp_count->reset();
-			increment_vp_count->exec();
+			inc_vp_count.reset();
+			inc_vp_count.exec();
 
 			//calculate the partition
 			//each vp has 4 shells, so we index by multiples of 4 based on the vp's id
@@ -248,7 +263,6 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 
 		//update the insert_point statement if vp_ids changed
 		update_vp_ids(vp_ids);
-		if (!ins_point) ins_point = make_stmt(str_ins_point(vp_ids));
 
 		ins_point->bind("part", part);
 		ins_point->bind("value", p_value.data(), p_value.size());
@@ -269,6 +283,9 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 
 int64_t MVPTable::insert_vantage_point(const blob_type& vp_value)
 {
+	check_db();
+	//TODO: maximum number of vantage points? at 4 shells per, the number of partitions hits 64 bits at 32
+
 	// Inserting a vantage point:
 	//   adds a new row to mvp_vantage_points
 	//   adds a new column of distances to mvp_points
@@ -281,109 +298,144 @@ int64_t MVPTable::insert_vantage_point(const blob_type& vp_value)
 	// and calculate the partition bounds from them instead of using the whole dataset
 
 	//1. add the new row to mvp_vantage_points and get the new vp's id
-	// by default, the bounds are all 0, so all of the points will fall into shell 3
-	// so count_3 needs to be set to the total number of points
-	// the way parition indexing works, adding the new vantage point does not require
-	// updating any existing partitions
-	sel_count->bind("col", "points");
-	int64_t point_count = exec_get(sel_count, 0).getInt64();
+	//   by default, the bounds are all 0, so all of the points will fall into shell 3
+	//   so count_3 needs to be set to the total number of points for consistency
+	auto& sel_points_count = get_stmt("SELECT points FROM mvp_counts WHERE id = 1;");
+	int64_t point_count = exec_get(sel_points_count, 0).getInt64();
+
+	auto& ins_vp = get_stmt(
+		"INSERT INTO mvp_vantage_points(count_3,value) "
+		"VALUES($count_3,$value) "
+		"RETURNING id;"
+	);
 
 	int64_t vp_id;
-	ins_vp->bind("count_3", point_count);
-	ins_vp->bind("value", vp_value.data(), vp_value.size());
-	ins_vp->reset();
-	if (ins_vp->executeStep()) {
+	ins_vp.bind("count_3", point_count);
+	ins_vp.bind("value", vp_value.data(), vp_value.size());
+	ins_vp.reset();
+	if (ins_vp.executeStep()) {
+		vp_id = ins_vp.getColumn("id").getInt64();
 		exec_increment_count("vantage_points");
-		vp_id = ins_vp->getColumn("id").getInt64();
 	}
 	else {
 		throw std::runtime_error("Error inserting new vantage_point");
 	}
 
 	//2. add the new column of distances to mvp_points
-	//   this uses the mvp_distance callback to calculate the 
-	//   distance from vp_value to each point
 	std::string col_name = "d" + std::to_string(vp_id);
 
-	add_points_col->bind("col", col_name);
-	add_points_col->bind("idx", "mvp_idx_" + col_name);
-	add_points_col->bind("vp_value", vp_value.data(), vp_value.size());
-	add_points_col->reset();
-	add_points_col->exec();
+	auto& add_col = get_stmt(
+		"ALTER TABLE mvp_points ADD COLUMN $col INTEGER;" // TODO: do we need "DEFAULT 0x7FFFFFFF" aka INT32_MAX?
+		"CREATE INDEX $idx ON mvp_points(partition, $col);"
+		"UPDATE mvp_points SET $col = mvp_distance($vp_value, value);"
+	);
 
-	//3. balance the partitions
-	// we want to find the 25%, 50%, and 75% distances
-	// which will be the partition boundaries
+	add_col.bind("col", col_name);
+	add_col.bind("idx", "mvp_idx_" + col_name);
+	add_col.bind("vp_value", vp_value.data(), vp_value.size());
+	add_col.reset();
+	add_col.exec();
+
+	//3. choose the shell boundaries so that they're balanced
+	//   we want to find the 25%, 50%, and 75% ranked distances
 	int64_t rank_25 = point_count / 4;
 	int64_t rank_50 = point_count / 2;
 	int64_t rank_75 = rank_50 + rank_25;
-	sel_point_by_rank->bind("col", col_name);
-	sel_point_by_rank->bind("rank", rank_25);
-	auto bound_1 = exec_get(sel_point_by_rank,0).getInt();
-	sel_point_by_rank->bind("rank", rank_50);
-	auto bound_2 = exec_get(sel_point_by_rank,0).getInt();
-	sel_point_by_rank->bind("rank", rank_75);
-	auto bound_3 = exec_get(sel_point_by_rank,0).getInt();
-	//the boundaries are inclusive lower bounds
-	// so the number of points in each are less one
+	auto& find_bound = get_stmt(
+		"SELECT $col FROM mvp_points ORDER BY $col LIMIT 1 OFFSET $rank;"
+	);
+	find_bound.bind("col", col_name);
+	find_bound.bind("rank", rank_25);
+	auto bound_1 = exec_get(find_bound,0).getInt();
+	find_bound.bind("rank", rank_50);
+	auto bound_2 = exec_get(find_bound,0).getInt();
+	find_bound.bind("rank", rank_75);
+	auto bound_3 = exec_get(find_bound,0).getInt();
+
+	// the shells include the lower bound, but exclude the upper
+	// so the number of points in shell 0 is one less than the rank
 	int64_t count_0 = rank_25 - 1;
 	int64_t count_1 = rank_50 - rank_25;
 	int64_t count_2 = rank_75 - rank_50;
 	int64_t count_3 = point_count - rank_75;
-	upd_vp->bind("bound_1", bound_1);
-	upd_vp->bind("bound_2", bound_2);
-	upd_vp->bind("bound_3", bound_3);
-	upd_vp->bind("count_0", count_0);
-	upd_vp->bind("count_1", count_1);
-	upd_vp->bind("count_2", count_2);
-	upd_vp->bind("count_3", count_3);
-	upd_vp->reset();
-	upd_vp->exec();
 
-	add_points_partition->bind("b1", bound_1);
-	add_points_partition->bind("b2", bound_2);
-	add_points_partition->bind("b3", bound_3);
-	add_points_partition->bind("col", col_name);
-	add_points_partition->bind("vp_id", vp_id);
-	add_points_partition->reset();
-	add_points_partition->exec();
+	auto& upd_vp = get_stmt(
+		"UPDATE mvp_vantage_points SET "
+		"bound_1 = $b1, bound_2 = $b2, bound_3 = $b3,"
+		"count_0 = $c0, count_1 = $c1, count_2 = $c2, count_3 = $c3 "
+		"WHERE id = $id;"
+	);
+	upd_vp.bind("b1", bound_1);
+	upd_vp.bind("b2", bound_2);
+	upd_vp.bind("b3", bound_3);
+	upd_vp.bind("c0", count_0);
+	upd_vp.bind("c1", count_1);
+	upd_vp.bind("c2", count_2);
+	upd_vp.bind("c3", count_3);
+	upd_vp.reset();
+	upd_vp.exec();
+
+	//4. Iterate over all of the points and update their partition for the new vantage point
+	auto& upd_points_part = get_stmt(
+		"UPDATE mvp_points SET "
+		"partition = partition + 4 * $vp_id * CASE "
+			"WHEN $col >= $b3 THEN 3 "
+			"WHEN $col >= $b2 THEN 2 "
+			"WHEN $col >= $b1 THEN 1 "
+			"ELSE 0 "
+		"END;"
+	);
+
+	upd_points_part.bind("b1", bound_1);
+	upd_points_part.bind("b2", bound_2);
+	upd_points_part.bind("b3", bound_3);
+	upd_points_part.bind("col", col_name);
+	upd_points_part.bind("vp_id", vp_id);
+	upd_points_part.reset();
+	upd_points_part.exec();
 }
 
 std::vector<int64_t> MVPTable::query(const blob_type& q_value, uint32_t radius, int64_t limit)
 {
-	// Get the distance from the query point to each vantage point
-	// and get the parititions that the query covers
+	check_db();
+
+	//Iterate over all of the vantage points
+	// getting the distance from each to the query point
+	// and for each shell, whether that shell intersects the query ball
+	auto& sel_vps = get_stmt(
+		"SELECT id, mvp_distance(value, $pt) as dist,"
+		"CASE WHEN $pt + $rad >= bound_3 THEN 1 ELSE 0 END AS shell_3,"
+		"CASE WHEN $pt + $rad >= bound_2 AND $pt - $rad < bound_3 THEN 1 ELSE 0 END AS shell_2,"
+		"CASE WHEN $pt + $rad >= bound_1 AND $pt - $rad < bound_2 THEN 1 ELSE 0 END AS shell_1,"
+		"CASE WHEN $pt - $rad < bound_1 THEN 1 ELSE 0 END AS shell_0,"
+		"FROM mvp_vantage_point ORDER BY id ASC;"
+	);
+
 	std::vector<int64_t> vp_ids;
 	std::vector<int32_t> dists;
 	std::vector<int64_t> parts;
-	parts.push_back(0);
-	sel_vps->reset();
-	while (sel_vps->executeStep()) {
-		auto id = sel_vps->getColumn("id").getInt64();
-		int32_t bound_1 = sel_vps->getColumn("bound_1").getInt();
-		int32_t bound_2 = sel_vps->getColumn("bound_2").getInt();
-		int32_t bound_3 = sel_vps->getColumn("bound_3").getInt();
-		auto vp_value = get_blob(sel_vps->getColumn("value"));
-
+	parts.push_back(0); // which paritions the query ball covers
+	sel_vps.bind("pt", q_value.data(), static_cast<int>(q_value.size()));
+	sel_vps.bind("rad", radius);
+	sel_vps.reset();
+	while (sel_vps.executeStep()) {
+		auto id = sel_vps.getColumn("id").getInt64();
+		auto dist = sel_vps.getColumn("dist").getInt();
+		auto shell_3 = sel_vps.getColumn("shell_3").getInt();
+		auto shell_2 = sel_vps.getColumn("shell_2").getInt();
+		auto shell_1 = sel_vps.getColumn("shell_1").getInt();
+		auto shell_0 = sel_vps.getColumn("shell_0").getInt();
+		
 		vp_ids.push_back(id);
-		int32_t d = dist_fn_(vp_value, q_value);
-		dists.push_back(d);
+		dists.push_back(dist);
 
 		std::vector<int> shells;
-		if (in_bounds(d, 0, bound_3)) {
-			shells.push_back(3);
-		}
-		else if (in_bounds(d, 0, bound_2, bound_3)) {
-			shells.push_back(2);
-		}
-		else if (in_bounds(d, 0, bound_1, bound_2)) {
-			shells.push_back(1);
-		}
-		else if (in_bounds(d, 0, 0, bound_1)) {
-			shells.push_back(0);
-		}
-		else {
-			throw std::runtime_error("Error inserting point: invalid distance");
+		if (shell_3 != 0) shells.push_back(3);
+		if (shell_2 != 0) shells.push_back(2);
+		if (shell_1 != 0) shells.push_back(1);
+		if (shell_0 != 0) shells.push_back(0);
+		if(shells.empty()) {
+			throw std::runtime_error("Error querying point: invalid shells");
 		}
 
 		if (shells.size() == 1) {
@@ -406,19 +458,16 @@ std::vector<int64_t> MVPTable::query(const blob_type& q_value, uint32_t radius, 
 	}
 	
 	update_vp_ids(vp_ids);
-	if (!ins_query) ins_query = make_stmt(str_ins_query(vp_ids));
-
-	//TODO: cull points based on their distance to the vantage points too
-	//  make str_ins_query dynamic and add
-	//    (d0 BETWEEN ? AND ?) ... to the WHERE term
-
+	
 	//populate the query table with the points covered by the partitions
 	// sort by the distance to the query point
 
 	//first clear the query table
-	del_query->reset();
-	del_query->exec();
+	auto& clear_query = get_stmt("DELETE FROM temp.mvp_query;");
+	clear_query.reset();
+	clear_query.exec();
 	
+
 	ins_query->bind("q_value", q_value.data(), q_value.size());
 	for (size_t i = 0; i < dists.size(); ++i) {
 		// bind (d{vp_ids[i]} BETWEEN ? AND ?)
@@ -432,27 +481,67 @@ std::vector<int64_t> MVPTable::query(const blob_type& q_value, uint32_t radius, 
 		ins_query->exec();
 	}
 	//get the points closest to the query point, within the radius
+	auto& sel_query = get_stmt(
+		"SELECT id FROM temp.mvp_query WHERE dist <= $rad ORDER BY dist DESC LIMIT $lim;"
+	);
+
 	std::vector<int64_t> result;
-	sel_query->bind("radius", radius);
-	sel_query->bind("limit", limit);
-	sel_query->reset();
-	while (sel_query->executeStep()) {
-		result.push_back(sel_query->getColumn(0).getInt64());
+	sel_query.bind("rad", radius);
+	sel_query.bind("lim", limit);
+	sel_query.reset();
+	while (sel_query.executeStep()) {
+		result.push_back(sel_query.getColumn(0).getInt64());
 	}
 	return result;
 }
 
 MVPTable::blob_type MVPTable::find_vantage_point(size_t sample_size)
 {
-	// do we have any vantage points yet?
-	sel_count->bind("col", "vantage_points");
-	int64_t num_vantage_points = exec_get_int64(sel_count);
+	check_db();
+	
+	//do we have any points yet?
+	auto& pt_count = get_stmt("SELECT points FROM mvp_counts WHERE id = 1;");
+	auto num_points = exec_get(pt_count, 0).getInt64();
+	if (num_points <= 0) {
+		throw std::runtime_error("Empty table");
+	}
 
+	// do we have any vantage points yet?
+	auto& vp_count = get_stmt("SELECT vantage_points FROM mvp_counts WHERE id = 1;");
+	auto num_vantage_points = exec_get(vp_count, 0).getInt64();
+
+	std::string stmt;
+	bool do_bind = false; //do we need to bind sample_size?
 	if (num_vantage_points > 0) {
 		//we need to find a point that's far from all of the existing vantage points
-
+		// the partition index increases with distance from each vantage point, so
+		// we just need to pick a point in the maximum partition
+		// NB this weights the importance of the vantage points by newest to oldest
+		stmt = "SELECT value FROM mvp_points ORDER BY partition DESC, random() LIMIT 1;";
 	}
 	else {
-		//we need to find a point that's far from all other points
+		//we need to find a point that's far from most other points
+		// since we don't have any vantage points yet, we will rank
+		// the points by the sum of the distances to all of the other points
+		// and pick the greatest
+		if (num_points <= sample_size) {
+			//we have few points, so do the pairwise distance between all
+			stmt = "SELECT value FROM ("
+				"SELECT p.value AS value, sum(mvp_distance(p.value, q.value)) AS sum_dist"
+				"FROM mvp_points p, mvp_points q GROUP BY p.id"
+				") ORDER BY sum_dist DESC LIMIT 1;";
+		}
+		else {
+			//subsample the points, then do the pairwise distance between them
+			stmt = "WITH sampled_points AS (SELECT value FROM mvp_points ORDER BY random() LIMIT $sample_size) "
+				"SELECT value FROM ("
+				"SELECT p.value AS value, sum(mvp_distance(p.value, q.value)) AS sum_dist"
+				"FROM sampled_points p, sampled_points q GROUP BY p.id"
+				") ORDER BY sum_dist DESC LIMIT 1;";
+			do_bind = true; //we need to bind sample_size
+		}
 	}
+	auto& find_far_point = get_stmt(stmt);
+	if (do_bind) find_far_point.bind("sample_size", static_cast<int64_t>(sample_size));
+	return get_blob(exec_get(find_far_point, 0));
 }
