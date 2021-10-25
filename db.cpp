@@ -1,11 +1,22 @@
 
 #include "db.h"
 #include "SQLiteCpp/SQLiteCpp.h"
+#include "mvptable.h"
 
 #include <algorithm>
 
+
+
 namespace imghash {
-	
+
+	class Database::Impl {
+		std::shared_ptr<SQLite::Database> db;
+		MVPTable table;
+	public:
+		Impl(const std::string& path);
+		void insert(const point_type& point, const item_type& item);
+		query_result query(const point_type& point, unsigned int dist, size_t limit = 10);
+	};
 
 	//Open the database
 	Database::Database(const std::string& path)
@@ -27,21 +38,36 @@ namespace imghash {
 	}
 
 	//Find similar images
-	std::vector<Database::item_type> Database::query(const point_type& point, unsigned int dist, size_t limit)
+	Database::query_result Database::query(const point_type& point, unsigned int dist, size_t limit)
 	{
 		return impl->query(point, dist, static_cast<int64_t>(limit));
 	}
 
-	//Add a vantage point for querying
-	void Database::add_vantage_point(const point_type& point)
+	Database::Impl::Impl(const std::string& path)
+		: db(std::make_shared<SQLite::Database>(path, SQLite::OPEN_CREATE)),
+		table()
 	{
-		impl->add_vantage_point(point);
+		SQLite::Transaction trans(*db);
+		table = MVPTable(db, Hash::distance);
+
+		db->exec(
+			"CREATE TABLE IF NOT EXISTS images ("
+				"path TEXT PRIMARY KEY,"
+				"mvp_id INTEGER,"
+				"FOREIGN KEY(mvp_id) REFERENCES mvp_points(id)"
+			") WITHOUT ROWID;"
+		);
+
+		trans.commit();
 	}
 
-	//Find a point that would make a good vantage point
-	Database::point_type Database::find_vantage_point(size_t sample_size)
+	void Database::Impl::insert(const point_type& point, const item_type& item)
 	{
-		return impl->find_vantage_point(sample_size);
+
 	}
-	
+
+	Database::query_result Database::Impl::query(const point_type& point, unsigned int dist, size_t limit)
+	{
+		return {};
+	}
 }

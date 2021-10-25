@@ -23,25 +23,30 @@ public:
 	// No transaction
 	explicit MVPTable(std::shared_ptr<SQLite::Database> db, std::function<distance_fn> dist_fn);
 
-	// Insert a point into mvp_points, if it doesn't already exist, returning the id
+	// Insert a point into mvp_points if it doesn't already exist
 	//  Each point is stored with the distances of the point to each vantage point
 	//  And which partition it falls into
 	// No transaction
+	// Returns the id of the point
 	int64_t insert_point(const blob_type& p_value);
 
-	// Insert a point into mvp_vantage_points, returning the new id
+	// Insert a point into mvp_vantage_points
 	// Throws a std::runtime_error if the point already exists
 	// Adds a new "d{id}" column to mvp_points and fills it with the distance
-	//   from each point to vp_vale
-	// Recomputes the mvp_points partition
+	//   from each point to vp_value
+	// Recomputes the mvp_points partition, balancing only the new vantage point
 	// No transaction
+	// Returns the id of the vantage point
 	int64_t insert_vantage_point(const blob_type& vp_value);
 
-	// Get point ids close to q_value
-	// 
-	std::vector<int64_t> query(const blob_type& q_value, uint32_t radius, int64_t limit);
+	// Get point ids within `radius` of `q_value`
+	// The results (id, dist) are stored in the temp.mvp_query table
+	// Returns the number of points found
+	int64_t query(const blob_type& q_value, uint32_t radius);
 
 	blob_type find_vantage_point(size_t sample_size);
+
+	void rebalance();
 
 protected:
 
@@ -74,9 +79,8 @@ protected:
 	static const std::string str_ins_point(const std::vector<int64_t>& vp_ids);
 
 	//INSERT INTO temp.mvp_query(id, dist)
-	//  SELECT id, mvp_distance($q_value, value) FROM mvp_points
-	//    WHERE partition = $partition AND (d0 BETWEEN ? AND ?) AND ...;
-	//where d0, d1, ... are "d{id}" for id in vp_ids
+	//  SELECT id, mvp_distance($q_value, value) AS dist
+	//    FROM mvp_points WHERE partition = $partition AND dist <= $radius;
 	static const std::string str_ins_query(const std::vector<int64_t>& vp_ids);
 
 	//The database connection
