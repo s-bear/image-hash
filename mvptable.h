@@ -8,6 +8,32 @@
 #include <cstdint>
 #include <functional>
 
+class SQLStatementCache
+{
+	//The database connection
+	std::shared_ptr<SQLite::Database> db;
+	/* Cache for compiled SQL statememts */
+	std::unordered_map<std::string, SQLite::Statement> stmts;
+
+public:
+	SQLStatementCache();
+	SQLStatementCache(std::shared_ptr<SQLite::Database> db);
+
+	SQLite::Statement& get(const std::string& stmt);
+	
+	inline SQLite::Statement& operator[](const std::string& stmt) {
+		return get(stmt);
+	}
+
+	void exec(const std::string& stmt);
+	SQLite::Column exec(const std::string& stmt, int col);
+	SQLite::Column exec(const std::string& stmt, const std::string& col);
+
+	void exec(SQLite::Statement& stmt);
+	SQLite::Column exec(SQLite::Statement& stmt, int col);
+	SQLite::Column exec(SQLite::Statement& stmt, const std::string& col);
+};
+
 class MVPTable
 {
 	//TODO: there's an annoying snag in the interface here, if this is ever to be generalized more
@@ -29,6 +55,10 @@ public:
 	// No transaction
 	// Returns the id of the point
 	int64_t insert_point(const blob_type& p_value);
+
+	//how many points are there (cached)?
+	int64_t count_points();
+	int64_t count_vantage_points();
 
 	// Insert a point into mvp_vantage_points
 	// Throws a std::runtime_error if the point already exists
@@ -52,27 +82,33 @@ protected:
 
 	void check_db();
 
-	std::function<distance_fn> dist_fn_;
+	//each vantage point gets 2 bits of the partition, indexed by its id
+	constexpr int64_t partition_offset(int64_t vp_id) { return 2 * (vp_id - 1); }
+	constexpr int64_t partition_mask() { return 0x3; }
 
+	constexpr int64_t partition_mask(int64_t vp_id) {
+		return partition_mask() << partition_offset(vp_id);
+	}
+	constexpr int64_t partition_bits(int64_t shell, int64_t vp_id) {
+		return shell << partition_offset(vp_id);
+	}
+
+	static void set_dist_fn(std::function<distance_fn> df);
+	static std::function<distance_fn> dist_fn;
 	// callback for "mvp_distance" sql function
-	//   user data is this
 	//   args are 2 point values, as blobs
-	//   returns this->dist_fn_(args[0], args[1])
+	//   returns dist_fn(args[0], args[1])
 	static void sql_distance(sqlite3_context* ctx, int n, sqlite3_value* args[]);
 	
 	//blob to vector
 	static blob_type get_blob(sqlite3_value* val);
 	static blob_type get_blob(SQLite::Column& col);
 
-	SQLite::Statement& get_stmt(const std::string& stmt);
-
 	// Update cached vp_ids
 	// Deletes ins_point if vp_ids has changed
 	void update_vp_ids(const std::vector<int64_t>& vp_ids);
 
-	// Increment the cached count of the given table
-	// No transaction
-	void exec_increment_count(const std::string& table);
+	void exec(const std::string& stmt);
 
 	//INSERT INTO mvp_points(part, value, d0, d1, ...) VALUES ($part, $value, $d0, $d1, ...) RETURNING id;
 	//where d0, d1, ... are "d{id}" for id in vp_ids
@@ -85,10 +121,9 @@ protected:
 
 	//The database connection
 	std::shared_ptr<SQLite::Database> db;
-
-	/* Cache for compiled SQL statememts */
-	std::unordered_map<std::string, SQLite::Statement> stmt_cache_;
-	// we treat these separately because they aren't static
+	SQLStatementCache cache;
+	
+	// we don't cache these statements because they aren't static
 
 	//INSERT INTO mvp_points(part, value, d0, d1, ...) VALUES ($part, $value, $d0, $d1, ...) RETURNING id;
 	//where d0, d1, ... are "d{id}" for id in vp_ids

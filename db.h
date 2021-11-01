@@ -3,6 +3,7 @@
 #include "imghash.h"
 
 #include <string>
+#include <utility>
 #include <memory>
 
 namespace imghash {
@@ -12,9 +13,9 @@ namespace imghash {
 		std::unique_ptr<Impl> impl;
 	public:
 		
-		using point_type = Hash::hash_type;
+		using point_type = Hasher::hash_type;
 		using item_type = std::string;
-		using query_result = std::vector<item_type>;
+		using query_result = std::pair<int32_t, item_type>;
 
 		//Open the database
 		Database(const std::string& path);
@@ -26,6 +27,6 @@ namespace imghash {
 		void insert(const point_type& point, const item_type& data);
 
 		//Find similar items
-		query_result query(const point_type& point, unsigned int dist, size_t limit = 10);
+		std::vector<query_result> query(const point_type& point, unsigned int dist, size_t limit = 10);
 	};
 }

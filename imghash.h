@@ -282,7 +282,7 @@ namespace imghash {
 	};
 
 	//! Class for implementing image hash functions
-	class Hash
+	class Hasher
 	{
 	public:
 		typedef std::vector<uint8_t> hash_type;
@@ -293,8 +293,8 @@ namespace imghash {
 		void clear();
 		void append_bit(bool b);
 	public:
-		Hash();
-		virtual ~Hash() {}
+		Hasher();
+		virtual ~Hasher() {}
 		virtual hash_type apply(const Image<float>& image) = 0;
 
 		//return true if the hashes are equal up to the length of the shorter hash
@@ -309,14 +309,14 @@ namespace imghash {
 	};
 
 	//! Block-average hash
-	class BlockHash : public Hash
+	class BlockHasher : public Hasher
 	{
 	public:
 		hash_type apply(const Image<float>& image);
 	};
 
 	//! Discrete Cosine Transform hash
-	class DCTHash : public Hash
+	class DCTHasher : public Hasher
 	{
 	protected:
 		//! 1D Discrete Cosine Transform coefficient
@@ -363,7 +363,7 @@ namespace imghash {
 		std::vector<float> m_;
 		
 	public:
-		DCTHash();
+		DCTHasher();
 
 		//! Construct a DCTHash object with M frequencies
 		/*!
@@ -383,7 +383,7 @@ namespace imghash {
 		\param M The number of DCT components in the output
 		\param even If true, use only even frequencies, for a symmetrical hash (mirror/flip tolerant).
 		*/
-		DCTHash(unsigned M, bool even);
+		DCTHasher(unsigned M, bool even);
 		
 		//! Apply the hash function
 		hash_type apply(const Image<float>& image);

@@ -3,12 +3,16 @@
 
 #include <iostream>
 #include <iomanip>
-
+#include <string>
 #include <vector>
 
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#endif
+
+#ifdef USE_SQLITE
+#include "db.h"
 #endif
 
 void print_usage() {
@@ -21,9 +25,14 @@ void print_usage() {
 	std::cout << "  OPTIONS are:\n";
 	std::cout << "    -h, --help : print this message and exit\n";
 	std::cout << "    -dN, --dct N: use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.\n";
-	//std::cout << "    -x : binary output.\n";
 	std::cout << "    -q, --quiet : don't output filename.\n";
-	std::cout << "  Supported file formats: \n";
+	std::cout << "    -n NAME, --name NAME: specify a name for output when reading from stdin\n";
+#ifdef USE_SQLITE
+	std::cout << "    --db DB_PATH : use the specified database for --add or --query.\n";
+	std::cout << "    --add : add the image to the database. If the image comes from stdin, --name must be specified.\n";
+	std::cout << "    --query DIST LIMIT: query the database for up to LIMIT similar images within DIST distance.\n";
+#endif
+	std::cout << "  Supported image formats: \n";
 #ifdef USE_JPEG
 	std::cout << "    jpeg\n";
 #endif
@@ -50,6 +59,31 @@ void print_hash(std::ostream& out, const std::vector<uint8_t>& hash, const std::
 	}
 }
 
+#ifdef USE_SQLITE
+void print_query(std::ostream& out, const std::vector<imghash::Database::query_result>& results, 
+	const std::string& prefix = "  ", const std::string& delim = ": ", const std::string& suffix = "\n")
+{
+	for (const auto& res : results) {
+		out << prefix << res.first << delim << res.second << suffix;
+	}
+}
+#endif
+
+int parse_dct_size(const std::string& s) {
+	static const char err_str[] = "Invalid dct size while parsing arguments. Must be 1, 2, 3, or 4.";
+	int x;
+	try {
+		x = std::stoi(s);
+	}
+	catch (...) {
+		throw std::runtime_error(err_str);
+	}
+	if (x < 1 || x > 4) {
+		throw std::runtime_error(err_str);
+	}
+	return x;
+}
+
 int main(int argc, const char* argv[])
 {
 	std::vector<std::string> files;
@@ -59,122 +93,168 @@ int main(int argc, const char* argv[])
 	bool use_dct = false;
 	bool binary = false;
 	bool quiet = false;
-	for (size_t i = 1; i < argc; ++i) {
-		auto arg = std::string(argv[i]);
-		if (arg[0] == '-') {
-			if (arg == "-h" || arg == "--help") {
-				print_usage();
-				return 0;
-			}
-			else if (arg == "-v" || arg == "--version") {
-				print_version();
-				return 0;
-			}
-			else if (arg.substr(0, 2) == "-d") {
-				use_dct = even = true;
-				if (arg.size() > 2) {
-					auto size_str = arg.substr(2);
-					if (size_str.size() > 1 || !isdigit(size_str[0])) {
-						std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
-						print_usage();
-						return 1;
-					}
-					dct_size = static_cast<size_t>(atoi(size_str.c_str()));
+	std::string db_path;
+	bool add = false;
+	unsigned int query_dist = 0;
+	size_t query_limit = 0;
+	std::string name;
+	
+	//parse options
+	try {
+		//TODO: use a proper options parsing library
+		for (size_t i = 1; i < argc; ++i) {
+			auto arg = std::string(argv[i]);
+			if (arg[0] == '-') {
+				if (arg == "-h" || arg == "--help") {
+					print_usage();
+					return 0;
 				}
-			}
-			else if (arg == "--dct") {
-				use_dct = even = true;
-				if (++i < argc) {
-					auto size_str = std::string(argv[i]);
-					if (size_str.size() > 1 || !isdigit(size_str[0])) {
-						std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
-						print_usage();
-						return 1;
+				else if (arg == "-v" || arg == "--version") {
+					print_version();
+					return 0;
+				}
+				else if (arg.substr(0, 2) == "-d") {
+					use_dct = even = true;
+					if (arg.size() > 2) {
+						dct_size = parse_dct_size(arg.substr(2));
 					}
-					dct_size = static_cast<size_t>(atoi(size_str.c_str()));
+				}
+				else if (arg == "--dct") {
+					use_dct = even = true;
+					if (++i < argc) {
+						dct_size = parse_dct_size(argv[i]);
+					}
+					else {
+						throw std::runtime_error("Missing dct size. Must be 1,2,3 or 4.");
+					}
+				}
+				else if (arg == "-q" || arg == "--quiet") quiet = true;
+				else if (arg == "-n" || arg == "--name") {
+					if (++i < argc) {
+						name = std::string(argv[i]);
+					}
+					else {
+						throw std::runtime_error("Missing output name.");
+					}
+				}
+				else if (arg == "-x") binary = true;
+				else if (arg == "--debug") debug = true;
+				else if (arg == "--db") {
+					if (++i < argc) {
+						db_path = std::string(argv[i]);
+					}
+					else {
+						throw std::runtime_error("Missing database file name.");
+					}
+				}
+				else if (arg == "--add") {
+					add = true;
+				}
+				else if (arg == "--query") {
+					if(i + 2 < argc) {
+						try {
+							query_dist = static_cast<unsigned int>(std::stoul(argv[++i]));
+							query_limit = static_cast<size_t>(std::stoull(argv[++i]));
+						}
+						catch (...) {
+							throw std::runtime_error("Invalid query size.");
+						}
+					}
+					else {
+						throw std::runtime_error("Missing query distance and/or limit.");
+					}
 				}
 				else {
-					std::cerr << "Missing dct size";
-					print_usage();
-					return 1;
+					throw std::runtime_error("Unknown option: " + arg);
 				}
 			}
-			else if (arg == "-q" || arg == "--quiet") quiet = true;
-			else if (arg == "-x") binary = true;
-			else if (arg == "--debug") debug = true;
 			else {
-				std::cerr << "Unknown option: " << arg << "\n";
-				print_usage();
-				return 1;
+				files.emplace_back(std::move(arg));
 			}
 		}
-		else {
-			files.emplace_back(std::move(arg));
-		}
-	}
 
-	if (use_dct && (dct_size < 1 || dct_size > 4)) {
-		std::cerr << "Invalid dct size. Must be 1,2,3 or 4\n";
-		print_usage();
-		return 1;
-	}
-
-	imghash::Preprocess prep(128, 128);
-
-	std::unique_ptr<imghash::Hash> hash;
-	if (use_dct) hash = std::make_unique<imghash::DCTHash>(8 * dct_size, even);
-	else hash = std::make_unique<imghash::BlockHash>();
-
-	int ret = 0;
-	if (files.empty()) {
-#ifdef _WIN32
-		auto result = _setmode(_fileno(stdin), _O_BINARY);
-		if (result < 0) {
-			std::cerr << "Failed to open stdin in binary mode";
-			return 1;
+#ifdef USE_SQLITE
+		if (db_path.empty() && (add || query_limit > 0)) {
+			throw std::runtime_error("--add and --query require --db to be specified.");
 		}
 #else
-		if (!freopen(nullptr, "rb", stdin)) {
-			std::cerr << "Failed to open stdin in binary mode";
-			return 1;
+		if (!db_path.empty() || add || query_limit > 0) {
+			throw std::runtime_error("Support for --db, --add, --query was not compiled. Rebuild with USE_SQLITE defined.");
 		}
 #endif
-		try {
+	}
+	catch (std::exception& e) {
+		print_usage();
+		std::cerr << "Error while parsing arguments: " << e.what() << std::endl;
+		return -1;
+	}
+	catch (...) {
+		print_usage();
+		std::cerr << "Unknown error while parsing arguments." << std::endl;
+		return -1;
+	}
+	//done parsing arguments, now do the processing
+
+	try {
+		imghash::Preprocess prep(128, 128);
+
+		std::unique_ptr<imghash::Hasher> hasher;
+		if (use_dct) hasher = std::make_unique<imghash::DCTHasher>(8 * dct_size, even);
+		else hasher = std::make_unique<imghash::BlockHasher>();
+
+#ifdef USE_SQLITE
+		std::unique_ptr<imghash::Database> db;
+		if (!db_path.empty()) db = std::make_unique<imghash::Database>(db_path);
+#endif
+
+		if (files.empty()) {
+			//read from stdin
+#ifdef _WIN32
+			auto result = _setmode(_fileno(stdin), _O_BINARY);
+			if (result < 0) {
+				throw std::runtime_error("Failed to open stdin in binary mode");
+			}
+#else
+			if (!freopen(nullptr, "rb", stdin)) {
+				throw std::runtime_error("Failed to open stdin in binary mode");
+			}
+#endif
+			
 			imghash::Image<float> img;
-			std::string file;
+			
 			img = load_ppm(stdin, prep);
 			while (img.size > 0) {
-				print_hash(std::cout, hash->apply(img), file, binary, true);
+				auto hash = hasher->apply(img);
+				print_hash(std::cout, hash, name, binary, quiet);
+				if (db) {
+					if (add) db->insert(hash, name);
+					if (query_limit > 0) print_query(std::cout, db->query(hash, query_dist, query_limit));
+				}
 				img = load_ppm(stdin, prep, false); //it's OK to get an empty file here
 			}
 		}
-		catch (std::exception& e) {
-			std::cerr << "Exception while processing input:\n";
-			std::cerr << e.what();
-			ret = -1;
-		}
-		catch (...) {
-			std::cerr << "Unknown exception while processing input:\n";
-			ret = -1;
-		}
-	}
-	else {
-		for (const auto& file : files) {
-			try {
+		else {
+			//read from list of files
+			for (const auto& file : files) {
 				imghash::Image<float> img = load(file, prep);
-				if (debug) save(file + ".pgm", img, 1.0f);
-				print_hash(std::cout, hash->apply(img), file, binary, quiet);
-			}
-			catch (std::exception& e) {
-				std::cerr << "Exception while processing file: " << file << "\n";
-				std::cerr << e.what();
-				ret = -1;
-			}
-			catch (...) {
-				std::cerr << "Unknown exception while processing file: " << file << "\n";
-				ret = -1;
+				
+				auto hash = hasher->apply(img);
+				print_hash(std::cout, hash, file, binary, quiet);
+				if (db) {
+					if (add) db->insert(hash, file);
+					if (query_limit > 0) print_query(std::cout, db->query(hash, query_dist, query_limit));
+				}
 			}
 		}
 	}
-	return ret;
+	catch (std::exception& e) {
+		std::cerr << "Error while processing image: " << e.what() << std::endl;
+		return -1;
+	}
+	catch (...) {
+		std::cerr << "Unknown error while processing image." << std::endl;
+		return -1;
+	}
+
+	return 0;
 }

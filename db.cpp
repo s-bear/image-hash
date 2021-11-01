@@ -5,17 +5,17 @@
 
 #include <algorithm>
 
-
-
 namespace imghash {
 
 	class Database::Impl {
 		std::shared_ptr<SQLite::Database> db;
+		SQLStatementCache cache;
+
 		MVPTable table;
 	public:
 		Impl(const std::string& path);
 		void insert(const point_type& point, const item_type& item);
-		query_result query(const point_type& point, unsigned int dist, size_t limit = 10);
+		std::vector<query_result> query(const point_type& point, unsigned int dist, size_t limit = 10);
 	};
 
 	//Open the database
@@ -28,7 +28,7 @@ namespace imghash {
 	//Close the database
 	Database::~Database()
 	{
-
+		//nothing else to do
 	}
 
 	//Add a file
@@ -38,18 +38,15 @@ namespace imghash {
 	}
 
 	//Find similar images
-	Database::query_result Database::query(const point_type& point, unsigned int dist, size_t limit)
+	std::vector<Database::query_result> Database::query(const point_type& point, unsigned int dist, size_t limit)
 	{
 		return impl->query(point, dist, static_cast<int64_t>(limit));
 	}
 
 	Database::Impl::Impl(const std::string& path)
-		: db(std::make_shared<SQLite::Database>(path, SQLite::OPEN_CREATE)),
-		table()
+		: db(std::make_shared<SQLite::Database>(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE)),
+		table(db, Hasher::distance), cache(db)
 	{
-		SQLite::Transaction trans(*db);
-		table = MVPTable(db, Hash::distance);
-
 		db->exec(
 			"CREATE TABLE IF NOT EXISTS images ("
 				"path TEXT PRIMARY KEY,"
@@ -57,17 +54,42 @@ namespace imghash {
 				"FOREIGN KEY(mvp_id) REFERENCES mvp_points(id)"
 			") WITHOUT ROWID;"
 		);
-
-		trans.commit();
 	}
 
 	void Database::Impl::insert(const point_type& point, const item_type& item)
 	{
+		// the first point inserted will also be the first vantage point
+		//TODO: this is maybe not ideal
+		if (table.count_vantage_points() == 0) {
+			table.insert_vantage_point(point);
+		}
+		auto point_id = table.insert_point(point);
 
+		auto& ins_image = cache[
+			"INSERT OR REPLACE INTO images(path,mvp_id) VALUES($path, $mvp_id);"
+		];
+		ins_image.reset();
+		ins_image.bind("$path", item);
+		ins_image.bind("$mvp_id", point_id);
+		ins_image.exec();
 	}
 
-	Database::query_result Database::Impl::query(const point_type& point, unsigned int dist, size_t limit)
+	std::vector<Database::query_result> Database::Impl::query(const point_type& point, unsigned int dist, size_t limit)
 	{
-		return {};
+		table.query(point, dist);
+		auto& sel_query = cache[
+			"SELECT i.path AS path, q.dist AS dist FROM temp.mvp_query q, images i ON q.id = i.mvp_id "
+			"WHERE dist < $radius ORDER BY dist LIMIT $limit;"
+		];
+		std::vector<query_result> result;
+		sel_query.reset();
+		sel_query.bind("$radius", dist);
+		sel_query.bind("$limit", static_cast<int64_t>(limit));
+		while (sel_query.executeStep()) {
+			std::string path = sel_query.getColumn("path").getString();
+			int32_t dist = sel_query.getColumn("dist").getInt();
+			result.emplace_back(dist, std::move(path));
+		}
+		return result;
 	}
 }

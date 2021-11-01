@@ -237,14 +237,14 @@ namespace imghash {
 		return prep.stop();
 	}
 
-	Hash::Hash() : bytes(), bi(8) {}
+	Hasher::Hasher() : bytes(), bi(8) {}
 
-	void Hash::clear() {
+	void Hasher::clear() {
 		bytes.clear();
 		bi = 8;
 	}
 
-	void Hash::append_bit(bool b) {
+	void Hasher::append_bit(bool b) {
 		if (bi > 7) {
 			bytes.push_back(0);
 			bi = 0;
@@ -255,18 +255,18 @@ namespace imghash {
 		++bi;
 	}
 
-	bool Hash::equal(const hash_type& h1, const hash_type& h2)
+	bool Hasher::equal(const hash_type& h1, const hash_type& h2)
 	{
-		return h1.size() == h2.size() && Hash::match(h1, h2);
+		return h1.size() == h2.size() && Hasher::match(h1, h2);
 	}
 
-	bool Hash::match(const hash_type& h1, const hash_type& h2)
+	bool Hasher::match(const hash_type& h1, const hash_type& h2)
 	{
 		size_t n = std::min(h1.size(), h2.size());
 		return std::equal(h1.begin(), h1.begin() + n, h2.begin(), h2.begin() + n);
 	}
 
-	uint32_t Hash::hamming_distance(const hash_type& h1, const hash_type& h2)
+	uint32_t Hasher::hamming_distance(const hash_type& h1, const hash_type& h2)
 	{
 		//TODO: use span to avoid copies
 		
@@ -278,12 +278,12 @@ namespace imghash {
 		}
 		return static_cast<uint32_t>(d);
 	}
-	uint32_t Hash::distance(const hash_type& h1, const hash_type& h2)
+	uint32_t Hasher::distance(const hash_type& h1, const hash_type& h2)
 	{
 		return hamming_distance(h1, h2);
 	}
 
-	std::vector<uint8_t> BlockHash::apply(const Image<float>& image)
+	std::vector<uint8_t> BlockHasher::apply(const Image<float>& image)
 	{
 		const size_t N = 8;
 		const size_t M = N + 2;
@@ -337,15 +337,15 @@ namespace imghash {
 		return bytes;
 	}
 
-	DCTHash::DCTHash(unsigned M, bool even)
+	DCTHasher::DCTHasher(unsigned M, bool even)
 		: N_(128), M_(M), even_(even), m_(mat(N_, M_, even_))
 	{
 		//nothing to do
 	}
 
-	DCTHash::DCTHash() : DCTHash(8, false) {}
+	DCTHasher::DCTHasher() : DCTHasher(8, false) {}
 
-	std::vector<float> DCTHash::mat(unsigned N, unsigned M)
+	std::vector<float> DCTHasher::mat(unsigned N, unsigned M)
 	{
 		if (M > N) M = N;
 		std::vector<float> m;
@@ -360,7 +360,7 @@ namespace imghash {
 		return m;
 	}
 
-	std::vector<float> DCTHash::mat_even(unsigned N, unsigned M)
+	std::vector<float> DCTHasher::mat_even(unsigned N, unsigned M)
 	{
 		if (M > N/2) M = N/2;
 		std::vector<float> m;
@@ -375,13 +375,13 @@ namespace imghash {
 		return m;
 	}
 
-	std::vector<float> DCTHash::mat(unsigned N, unsigned M, bool even)
+	std::vector<float> DCTHasher::mat(unsigned N, unsigned M, bool even)
 	{
 		if (even) return mat_even(N, M);
 		else return mat(N, M);
 	}
 
-	std::vector<uint8_t> DCTHash::apply(const Image<float>& image)
+	std::vector<uint8_t> DCTHasher::apply(const Image<float>& image)
 	{
 		if (image.width != image.height || image.channels != 1) {
 			throw std::runtime_error("DCT: image must be square and single-channel");
