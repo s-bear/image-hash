@@ -155,7 +155,6 @@ void MVPTable::set_dist_fn(std::function<distance_fn> df)
 
 void MVPTable::sql_distance(sqlite3_context* ctx, int n, sqlite3_value* args[])
 {
-	auto mvp_table = static_cast<MVPTable*>(sqlite3_user_data(ctx));
 	if (n != 2) {
 		sqlite3_result_error(ctx, "mvp_distance requires 2 arguments.", -1);
 		return;
@@ -210,12 +209,6 @@ void MVPTable::update_vp_ids(const std::vector<int64_t>& vp_ids)
 	}
 }
 
-void MVPTable::exec(const std::string& stmt) {
-	auto& s = cache[stmt];
-	s.reset();
-	s.exec();
-}
-
 int64_t MVPTable::count_points() {
 	return cache.exec("SELECT points FROM mvp_counts WHERE id = 1;", 0).getInt64();
 }
@@ -265,8 +258,8 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 		std::vector<int64_t> vp_ids;
 		std::vector<int32_t> dists;
 		int64_t part = 0;
-		sel_vps.bind("$pt", p_value.data(), static_cast<int>(p_value.size()));
 		sel_vps.reset();
+		sel_vps.bind("$pt", p_value.data(), static_cast<int>(p_value.size()));
 		while (sel_vps.executeStep()) {
 			auto id = sel_vps.getColumn("id").getInt64();
 			auto dist = sel_vps.getColumn("dist").getInt();

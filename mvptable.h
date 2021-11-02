@@ -108,8 +108,6 @@ protected:
 	// Deletes ins_point if vp_ids has changed
 	void update_vp_ids(const std::vector<int64_t>& vp_ids);
 
-	void exec(const std::string& stmt);
-
 	//INSERT INTO mvp_points(part, value, d0, d1, ...) VALUES ($part, $value, $d0, $d1, ...) RETURNING id;
 	//where d0, d1, ... are "d{id}" for id in vp_ids
 	static const std::string str_ins_point(const std::vector<int64_t>& vp_ids);
