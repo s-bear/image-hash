@@ -63,15 +63,25 @@ namespace imghash {
 		if (table.count_vantage_points() == 0) {
 			table.insert_vantage_point(point);
 		}
+		
 		auto point_id = table.insert_point(point);
+
+#ifdef _DEBUG
+		int64_t min_balance = 20;
+		int64_t vp_target = 5;
+#else
+		int64_t min_balance = 50;
+		int64_t vp_target = 100;
+#endif
+		table.auto_balance(min_balance, 0.5f);
+		table.auto_vantage_point(vp_target);
 
 		auto& ins_image = cache[
 			"INSERT OR REPLACE INTO images(path,mvp_id) VALUES($path, $mvp_id);"
 		];
-		ins_image.reset();
 		ins_image.bind("$path", item);
 		ins_image.bind("$mvp_id", point_id);
-		ins_image.exec();
+		cache.exec(ins_image);
 	}
 
 	std::vector<Database::query_result> Database::Impl::query(const point_type& point, unsigned int dist, size_t limit)
@@ -82,7 +92,7 @@ namespace imghash {
 			"WHERE dist < $radius ORDER BY dist LIMIT $limit;"
 		];
 		std::vector<query_result> result;
-		sel_query.reset();
+		
 		sel_query.bind("$radius", dist);
 		sel_query.bind("$limit", static_cast<int64_t>(limit));
 		while (sel_query.executeStep()) {
@@ -90,6 +100,7 @@ namespace imghash {
 			int32_t dist = sel_query.getColumn("dist").getInt();
 			result.emplace_back(dist, std::move(path));
 		}
+		sel_query.reset();
 		return result;
 	}
 }

@@ -25,13 +25,32 @@ public:
 		return get(stmt);
 	}
 
-	void exec(const std::string& stmt);
-	SQLite::Column exec(const std::string& stmt, int col);
-	SQLite::Column exec(const std::string& stmt, const std::string& col);
-
 	void exec(SQLite::Statement& stmt);
-	SQLite::Column exec(SQLite::Statement& stmt, int col);
-	SQLite::Column exec(SQLite::Statement& stmt, const std::string& col);
+	void exec(const std::string& stmt);
+
+	int32_t exec_getInt(SQLite::Statement& stmt, int column);
+	int64_t exec_getInt64(SQLite::Statement& stmt, int column);
+	std::string exec_getString(SQLite::Statement& stmt, int column);
+	double exec_getDouble(SQLite::Statement& stmt, int column);
+	std::vector<uint8_t> exec_getBlob(SQLite::Statement& stmt, int column);
+
+	int32_t exec_getInt(const std::string& stmt, int column);
+	int64_t exec_getInt64(const std::string& stmt, int column);
+	std::string exec_getString(const std::string& stmt, int column);
+	double exec_getDouble(const std::string& stmt, int column);
+	std::vector<uint8_t> exec_getBlob(const std::string& stmt, int column);
+
+	int32_t exec_getInt(SQLite::Statement& stmt, const std::string& column);
+	int64_t exec_getInt64(SQLite::Statement& stmt, const std::string& column);
+	std::string exec_getString(SQLite::Statement& stmt, const std::string& column);
+	double exec_getDouble(SQLite::Statement& stmt, const std::string& column);
+	std::vector<uint8_t> exec_getBlob(SQLite::Statement& stmt, const std::string& column);
+
+	int32_t exec_getInt(const std::string& stmt, const std::string& column);
+	int64_t exec_getInt64(const std::string& stmt, const std::string& column);
+	std::string exec_getString(const std::string& stmt, const std::string& column);
+	double exec_getDouble(const std::string& stmt, const std::string& column);
+	std::vector<uint8_t> exec_getBlob(const std::string& stmt, const std::string& column);
 };
 
 class MVPTable
@@ -74,9 +93,23 @@ public:
 	// Returns the number of points found
 	int64_t query(const blob_type& q_value, uint32_t radius);
 
+	// Find a point that would make a good vantage point
 	blob_type find_vantage_point(size_t sample_size);
 
-	void rebalance();
+	// Get ids of vantage points that are imbalanced beyond the threshold
+	// threshold must be in 0.0 to 1.0
+	// if there are fewer than min_count points in the database, does nothing
+	std::vector<int64_t> check_balance(int64_t min_count = 50, float threshold = 0.5f);
+	
+	// Balance the given vantage point
+	void balance(int64_t vp_id);
+
+	//balance(id) for each id in check_balance(threshold);
+	void auto_balance(int64_t min_count = 50, float threshold = 0.5f);
+
+	// insert vantage points using find_vantage_point
+	// until the number of vantage points meets or exceeds log(count_points()) / log(4 * target)
+	int64_t auto_vantage_point(int64_t target = 100);
 
 protected:
 

@@ -25,32 +25,10 @@ SQLite::Statement& SQLStatementCache::get(const std::string& stmt)
 	return res.first->second;
 }
 
-void SQLStatementCache::exec(SQLite::Statement& stmt) 
+void SQLStatementCache::exec(SQLite::Statement& stmt)
 {
-	stmt.reset();
 	stmt.exec();
-}
-
-SQLite::Column SQLStatementCache::exec(SQLite::Statement& stmt, int col)
-{
 	stmt.reset();
-	if (stmt.executeStep()) {
-		return stmt.getColumn(col);
-	}
-	else {
-		throw std::runtime_error("Error executing statement");
-	}
-}
-
-SQLite::Column SQLStatementCache::exec(SQLite::Statement& stmt, const std::string& col)
-{
-	stmt.reset();
-	if (stmt.executeStep()) {
-		return stmt.getColumn(col.c_str());
-	}
-	else {
-		throw std::runtime_error("Error executing statement");
-	}
 }
 
 void SQLStatementCache::exec(const std::string& stmt)
@@ -58,15 +36,132 @@ void SQLStatementCache::exec(const std::string& stmt)
 	exec(get(stmt));
 }
 
-SQLite::Column SQLStatementCache::exec(const std::string& stmt, int col)
+int32_t SQLStatementCache::exec_getInt(SQLite::Statement& stmt, int column)
 {
-	return exec(get(stmt), col);
+	if (stmt.executeStep()) {
+		auto r = stmt.getColumn(column).getInt();
+		stmt.reset();
+		return r;
+	}
+	else {
+		throw std::runtime_error("Error executing statement");
+	}
 }
 
-SQLite::Column SQLStatementCache::exec(const std::string& stmt, const std::string& col)
+int64_t SQLStatementCache::exec_getInt64(SQLite::Statement& stmt, int column)
 {
-	return exec(get(stmt), col);
+	if (stmt.executeStep()) {
+		auto r = stmt.getColumn(column).getInt64();
+		stmt.reset();
+		return r;
+	}
+	else {
+		throw std::runtime_error("Error executing statement");
+	}
 }
+
+std::string SQLStatementCache::exec_getString(SQLite::Statement& stmt, int column)
+{
+	if (stmt.executeStep()) {
+		auto r = stmt.getColumn(column).getString();
+		stmt.reset();
+		return r;
+	}
+	else {
+		throw std::runtime_error("Error executing statement");
+	}
+}
+
+double SQLStatementCache::exec_getDouble(SQLite::Statement& stmt, int column)
+{
+	if (stmt.executeStep()) {
+		auto r = stmt.getColumn(column).getDouble();
+		stmt.reset();
+		return r;
+	}
+	else {
+		throw std::runtime_error("Error executing statement");
+	}
+}
+
+std::vector<uint8_t> SQLStatementCache::exec_getBlob(SQLite::Statement& stmt, int column)
+{
+	if (stmt.executeStep()) {
+		auto col = stmt.getColumn(column);
+		const uint8_t* data = static_cast<const uint8_t*>(col.getBlob());
+		int n = col.getBytes();
+		std::vector<uint8_t> r(data, data + n);
+		stmt.reset();
+		return r;
+	}
+	else {
+		throw std::runtime_error("Error executing statement");
+	}
+}
+
+int32_t SQLStatementCache::exec_getInt(SQLite::Statement& stmt, const std::string& column)
+{
+	return exec_getInt(stmt, stmt.getColumnIndex(column.c_str()));
+}
+int64_t SQLStatementCache::exec_getInt64(SQLite::Statement& stmt, const std::string& column)
+{
+	return exec_getInt64(stmt, stmt.getColumnIndex(column.c_str()));
+}
+std::string SQLStatementCache::exec_getString(SQLite::Statement& stmt, const std::string& column)
+{
+	return exec_getString(stmt, stmt.getColumnIndex(column.c_str()));
+}
+double SQLStatementCache::exec_getDouble(SQLite::Statement& stmt, const std::string& column)
+{
+	return exec_getDouble(stmt, stmt.getColumnIndex(column.c_str()));
+}
+std::vector<uint8_t> SQLStatementCache::exec_getBlob(SQLite::Statement& stmt, const std::string& column)
+{
+	return exec_getBlob(stmt, stmt.getColumnIndex(column.c_str()));
+}
+
+int32_t SQLStatementCache::exec_getInt(const std::string& stmt, int column)
+{
+	return exec_getInt(get(stmt), column);
+}
+int64_t SQLStatementCache::exec_getInt64(const std::string& stmt, int column)
+{
+	return exec_getInt64(get(stmt), column);
+}
+std::string SQLStatementCache::exec_getString(const std::string& stmt, int column)
+{
+	return exec_getString(get(stmt), column);
+}
+double SQLStatementCache::exec_getDouble(const std::string& stmt, int column)
+{
+	return exec_getDouble(get(stmt), column);
+}
+std::vector<uint8_t> SQLStatementCache::exec_getBlob(const std::string& stmt, int column)
+{
+	return exec_getBlob(get(stmt), column);
+}
+
+int32_t SQLStatementCache::exec_getInt(const std::string& stmt, const std::string& column)
+{
+	return exec_getInt(get(stmt), column);
+}
+int64_t SQLStatementCache::exec_getInt64(const std::string& stmt, const std::string& column)
+{
+	return exec_getInt64(get(stmt), column);
+}
+std::string SQLStatementCache::exec_getString(const std::string& stmt, const std::string& column)
+{
+	return exec_getString(get(stmt), column);
+}
+double SQLStatementCache::exec_getDouble(const std::string& stmt, const std::string& column)
+{
+	return exec_getDouble(get(stmt), column);
+}
+std::vector<uint8_t> SQLStatementCache::exec_getBlob(const std::string& stmt, const std::string& column)
+{
+	return exec_getBlob(get(stmt), column);
+}
+
 
 void MVPTable::check_db() {
 	if (db == nullptr) throw std::runtime_error("No database connection");
@@ -210,11 +305,11 @@ void MVPTable::update_vp_ids(const std::vector<int64_t>& vp_ids)
 }
 
 int64_t MVPTable::count_points() {
-	return cache.exec("SELECT points FROM mvp_counts WHERE id = 1;", 0).getInt64();
+	return cache.exec_getInt64("SELECT points FROM mvp_counts WHERE id = 1;", "points");
 }
 
 int64_t MVPTable::count_vantage_points() {
-	return cache.exec("SELECT vantage_points FROM mvp_counts WHERE id = 1;", 0).getInt64();
+	return cache.exec_getInt64("SELECT vantage_points FROM mvp_counts WHERE id = 1;", "vantage_points");
 }
 
 int64_t MVPTable::insert_point(const blob_type& p_value)
@@ -223,14 +318,15 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 
 	//is the point already in the database?
 	auto& sel_pt = cache["SELECT id FROM mvp_points WHERE value = $value;"];
-	sel_pt.reset();
 	sel_pt.bind("$value", p_value.data(), static_cast<int>(p_value.size()));
 	if (sel_pt.executeStep()) {
 		//yes
 		auto id = sel_pt.getColumn(0).getInt64();
+		sel_pt.reset();
 		return id;
 	}
 	else {
+		sel_pt.reset();
 		//no: we need to add the point
 
 		//iterate over the vantage points
@@ -258,7 +354,6 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 		std::vector<int64_t> vp_ids;
 		std::vector<int32_t> dists;
 		int64_t part = 0;
-		sel_vps.reset();
 		sel_vps.bind("$pt", p_value.data(), static_cast<int>(p_value.size()));
 		while (sel_vps.executeStep()) {
 			auto id = sel_vps.getColumn("id").getInt64();
@@ -270,24 +365,24 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 
 			//increment shell count
 			if (shell == 3) {
-				inc_count_3.reset();
 				inc_count_3.bind("$id", id);
 				inc_count_3.exec();
+				inc_count_3.reset();
 			}
 			else if (shell == 2) {
-				inc_count_2.reset();
 				inc_count_2.bind("$id", id);
 				inc_count_2.exec();
+				inc_count_2.reset();
 			}
 			else if (shell == 1) {
-				inc_count_1.reset();
 				inc_count_1.bind("$id", id);
 				inc_count_1.exec();
+				inc_count_1.reset();
 			}
 			else if (shell == 0) {
-				inc_count_0.reset();
 				inc_count_0.bind("$id", id);
 				inc_count_0.exec();
+				inc_count_0.reset();
 			}
 			else {
 				throw std::runtime_error("Error inserting point: invalid shell");
@@ -296,11 +391,11 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 			//calculate the partition
 			part |= partition_bits(shell, id);
 		}
+		sel_vps.reset();
 
 		//update the insert_point statement if vp_ids changed
 		update_vp_ids(vp_ids);
 
-		ins_point->reset();
 		ins_point->bind("$partition", part);
 		ins_point->bind("$value", p_value.data(), static_cast<int>(p_value.size()));
 		for (int i = 0; i < dists.size(); ++i) {
@@ -310,6 +405,7 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 			cache.exec("UPDATE mvp_counts SET points = points + 1 WHERE id = 1;");
 			
 			auto id = ins_point->getColumn(0).getInt64();
+			ins_point->reset();
 			return id;
 		}
 		else {
@@ -317,7 +413,6 @@ int64_t MVPTable::insert_point(const blob_type& p_value)
 		}
 	}
 }
-
 
 int64_t MVPTable::insert_vantage_point(const blob_type& vp_value)
 {
@@ -342,11 +437,11 @@ int64_t MVPTable::insert_vantage_point(const blob_type& vp_value)
 	];
 
 	int64_t vp_id;
-	ins_vp.reset();
 	ins_vp.bind("$value", vp_value.data(), static_cast<int>(vp_value.size()));
 	if (ins_vp.executeStep()) {
 		vp_id = ins_vp.getColumn("id").getInt64();
 		cache.exec("UPDATE mvp_counts SET vantage_points = vantage_points + 1 WHERE id = 1;");
+		ins_vp.reset();
 	}
 	else {
 		throw std::runtime_error("Error inserting new vantage_point");
@@ -358,77 +453,13 @@ int64_t MVPTable::insert_vantage_point(const blob_type& vp_value)
 	db->exec("ALTER TABLE mvp_points ADD COLUMN " + col_name + " INTEGER;");
 	
 	db->exec("CREATE INDEX mvp_idx_" + col_name + " ON mvp_points(" + col_name + ");");
-	// we have to commit now, to add the column
 	
 	auto upd_col = SQLite::Statement(*db, "UPDATE mvp_points SET " + col_name + " = mvp_distance($vp_value, value);");
-	
-	//3. choose the shell boundaries so that they're balanced
-	//   we want to find the 25%, 50%, and 75% ranked distances
-	auto point_count = count_points();
-	int32_t bound_1, bound_2, bound_3;
-	int64_t count_0, count_1, count_2, count_3;
-	if (point_count > 50) {
-		auto rank_25 = point_count / 4;
-		auto rank_50 = point_count / 2;
-		auto rank_75 = rank_50 + rank_25;
-		auto find_bound = SQLite::Statement(*db,
-			"SELECT " + col_name + " FROM mvp_points ORDER BY " + col_name + " LIMIT 1 OFFSET $rank;"
-		);
-		find_bound.bind("$rank", rank_25);
-		bound_1 = cache.exec(find_bound, 0).getInt();
-		find_bound.bind("$rank", rank_50);
-		bound_2 = cache.exec(find_bound, 0).getInt();
-		find_bound.bind("$rank", rank_75);
-		bound_3 = cache.exec(find_bound, 0).getInt();
+	upd_col.bind("$vp_value", vp_value.data(), static_cast<int>(vp_value.size()));
+	cache.exec(upd_col);
 
-		// the shells include the lower bound, but exclude the upper
-		// so the number of points in shell 0 is one less than the rank
-		count_0 = rank_25 - 1;
-		count_1 = rank_50 - rank_25;
-		count_2 = rank_75 - rank_50;
-		count_3 = point_count - rank_75;
-	}
-	else {
-		bound_1 = bound_2 = bound_3 = 0;
-		count_0 = count_1 = count_2 = 0;
-		count_3 = point_count;
-	}
-	
-	auto& upd_vp = cache[
-		"UPDATE mvp_vantage_points SET "
-		"bound_1 = $b1, bound_2 = $b2, bound_3 = $b3,"
-		"count_0 = $c0, count_1 = $c1, count_2 = $c2, count_3 = $c3 "
-		"WHERE id = $id;"
-	];
-	upd_vp.reset();
-	upd_vp.bind("$id", vp_id);
-	upd_vp.bind("$b1", bound_1);
-	upd_vp.bind("$b2", bound_2);
-	upd_vp.bind("$b3", bound_3);
-	upd_vp.bind("$c0", count_0);
-	upd_vp.bind("$c1", count_1);
-	upd_vp.bind("$c2", count_2);
-	upd_vp.bind("$c3", count_3);
-	upd_vp.exec();
-
-	//4. Iterate over all of the points and update their partition for the new vantage point
-	auto upd_points_part = SQLite::Statement(*db,
-		"UPDATE mvp_points SET "
-		"partition = partition | ("
-		"CASE " // as partition_bits()
-		"WHEN " + col_name + " >= $b3 THEN 3 "
-		"WHEN " + col_name + " >= $b2 THEN 2 "
-		"WHEN " + col_name + " >= $b1 THEN 1 "
-		"ELSE 0 "
-		"END << (2 * $vp_id));"
-	);
-
-	upd_points_part.reset();
-	upd_points_part.bind("$b1", bound_1);
-	upd_points_part.bind("$b2", bound_2);
-	upd_points_part.bind("$b3", bound_3);
-	upd_points_part.bind("$vp_id", vp_id);
-	upd_points_part.exec();
+	//3. balance the shells
+	balance(vp_id);
 
 	return vp_id;
 }
@@ -457,7 +488,7 @@ int64_t MVPTable::query(const blob_type& q_value, uint32_t radius)
 	std::vector<int64_t> vp_ids;
 	std::vector<int64_t> parts;
 	parts.push_back(0); // which paritions the query ball covers
-	sel_vps.reset();
+	
 	sel_vps.bind("$pt", q_value.data(), static_cast<int>(q_value.size()));
 	sel_vps.bind("$rad", radius);
 	while (sel_vps.executeStep()) {
@@ -498,19 +529,16 @@ int64_t MVPTable::query(const blob_type& q_value, uint32_t radius)
 			parts = std::move(new_parts);
 		}
 	}
-	
+	sel_vps.reset();
 	update_vp_ids(vp_ids);
 	
 	//populate the query table with the points covered by the partitions
 	// sort by the distance to the query point
 
 	//first clear the query table
-	auto& clear_query = cache["DELETE FROM mvp_query;"];
-	clear_query.reset();
-	clear_query.exec();
+	cache.exec("DELETE FROM mvp_query;");
 	
 	// build the query 
-	ins_query->reset();
 	ins_query->bind("$q_value", q_value.data(), static_cast<int>(q_value.size()));
 	ins_query->bind("$radius", radius);
 	//run the query for each partition that the radius covers
@@ -541,8 +569,8 @@ MVPTable::blob_type MVPTable::find_vantage_point(size_t sample_size)
 		// the partition index increases with distance from each vantage point, so
 		// we just need to pick a point in the maximum partition
 		// NB this weights the importance of the vantage points by newest to oldest
-		return get_blob(cache.exec(
-			"SELECT value FROM mvp_points ORDER BY partition DESC, random() LIMIT 1;", 0));
+		return cache.exec_getBlob(
+			"SELECT value FROM mvp_points ORDER BY partition DESC, random() LIMIT 1;", "value");
 	}
 	else {
 		//we need to find a point that's far from most other points
@@ -551,11 +579,11 @@ MVPTable::blob_type MVPTable::find_vantage_point(size_t sample_size)
 		// and pick the greatest
 		if (num_points <= sample_size) {
 			//we have few points, so do the pairwise distance between all
-			return get_blob(cache.exec(
+			return cache.exec_getBlob(
 				"SELECT value FROM ("
 				"SELECT p.value AS value, sum(mvp_distance(p.value, q.value)) AS sum_dist"
 				"FROM mvp_points p, mvp_points q GROUP BY p.id"
-				") ORDER BY sum_dist DESC LIMIT 1;", 0));
+				") ORDER BY sum_dist DESC LIMIT 1;", "value");
 		}
 		else {
 			//subsample the points, then do the pairwise distance between them
@@ -567,13 +595,136 @@ MVPTable::blob_type MVPTable::find_vantage_point(size_t sample_size)
 				"FROM sampled_points p, sampled_points q GROUP BY p.id"
 				") ORDER BY sum_dist DESC LIMIT 1;"];
 			stmt.bind("$sample_size", static_cast<int64_t>(sample_size));
-			return get_blob(cache.exec(stmt, 0));
+			return cache.exec_getBlob(stmt, "value");
 		}
 	}
 }
 
-void MVPTable::rebalance()
+std::vector<int64_t> MVPTable::check_balance(int64_t min_count, float threshold) 
 {
-	//TODO
-	throw std::runtime_error("Not implemented");
+	auto np = count_points();
+	if (np < min_count) return {};
+
+	//low and high thresholds for balance -- if any shell is outside these counts then it needs rebalancing
+	// the /4 is because the points are divided into 4 shells around each vantage point
+	auto low = np * (1.0 - threshold) / 4;
+	auto high = np * (1.0 + threshold) / 4;
+	//scan through the existing vantage points and check to see if their partitions are balanced
+	auto& sel_vps = cache["SELECT id, count_0, count_1, count_2, count_3 FROM mvp_vantage_points ORDER BY id ASC;"];
+	std::vector<int64_t> bad_ids;
+	while (sel_vps.executeStep()) {
+		auto id = sel_vps.getColumn("id").getInt64();
+		auto count_0 = sel_vps.getColumn("count_0").getInt64();
+		auto count_1 = sel_vps.getColumn("count_1").getInt64();
+		auto count_2 = sel_vps.getColumn("count_2").getInt64();
+		auto count_3 = sel_vps.getColumn("count_3").getInt64();
+		if (count_0 < low || count_1 < low || count_2 < low || count_3 < low
+			|| count_0 > high || count_1 > high || count_2 > high || count_3 > high) 
+		{
+			bad_ids.push_back(id);
+		}
+	}
+	sel_vps.reset();
+	return bad_ids;
+}
+
+void MVPTable::balance(int64_t vp_id)
+{
+	std::string col_name = "d" + std::to_string(vp_id);
+
+	//3. choose the shell boundaries so that they're balanced
+	//   we want to find the 25%, 50%, and 75% ranked distances
+	
+	int32_t bound_1, bound_2, bound_3;
+	int64_t count_0, count_1, count_2, count_3;
+	
+	auto point_count = count_points();
+	if (point_count >= 8) {
+		auto rank_25 = point_count / 4;
+		auto rank_50 = point_count / 2;
+		auto rank_75 = rank_50 + rank_25;
+		auto find_bound = SQLite::Statement(*db,
+			"SELECT " + col_name + " FROM mvp_points ORDER BY " + col_name + " LIMIT 1 OFFSET $rank;"
+		);
+		find_bound.bind("$rank", rank_25);
+		bound_1 = cache.exec_getInt(find_bound, 0);
+
+		find_bound.bind("$rank", rank_50);
+		bound_2 = cache.exec_getInt(find_bound, 0);
+
+		find_bound.bind("$rank", rank_75);
+		bound_3 = cache.exec_getInt(find_bound, 0);
+
+		// the shells include the lower bound, but exclude the upper
+		// so the number of points is the difference between ranks
+		count_0 = rank_25;
+		count_1 = rank_50 - rank_25;
+		count_2 = rank_75 - rank_50;
+		count_3 = point_count - rank_75;
+		//if the shells collapse to zero width, then the highest shell is
+		// used when partitioning and querying. 
+		// However, we want to leave the counts alone here
+		// so that we're not continuously trying to rebalance it
+	}
+	else {
+		bound_1 = bound_2 = bound_3 = 0;
+		count_0 = count_1 = count_2 = 0;
+		count_3 = point_count;
+	}
+
+	auto& upd_vp = cache[
+		"UPDATE mvp_vantage_points SET "
+			"bound_1 = $b1, bound_2 = $b2, bound_3 = $b3,"
+			"count_0 = $c0, count_1 = $c1, count_2 = $c2, count_3 = $c3 "
+			"WHERE id = $id;"
+	];
+	upd_vp.bind("$id", vp_id);
+	upd_vp.bind("$b1", bound_1);
+	upd_vp.bind("$b2", bound_2);
+	upd_vp.bind("$b3", bound_3);
+	upd_vp.bind("$c0", count_0);
+	upd_vp.bind("$c1", count_1);
+	upd_vp.bind("$c2", count_2);
+	upd_vp.bind("$c3", count_3);
+	cache.exec(upd_vp);
+
+	//4. Iterate over all of the points and update their partition for the new vantage point
+	auto upd_points_part = SQLite::Statement(*db,
+		"UPDATE mvp_points SET "
+		"partition = (partition & $mask) | ("
+		"CASE " // as partition_bits()
+		"WHEN " + col_name + " >= $b3 THEN 3 "
+		"WHEN " + col_name + " >= $b2 THEN 2 "
+		"WHEN " + col_name + " >= $b1 THEN 1 "
+		"ELSE 0 "
+		"END << $part_off);"
+	);
+
+	upd_points_part.bind("$mask", ~partition_mask(vp_id)); //zero for this partition, ones elsewhere
+	upd_points_part.bind("$part_off", partition_offset(vp_id));
+	upd_points_part.bind("$b1", bound_1);
+	upd_points_part.bind("$b2", bound_2);
+	upd_points_part.bind("$b3", bound_3);
+	cache.exec(upd_points_part);
+}
+
+void MVPTable::auto_balance(int64_t min_count, float threshold) 
+{
+	auto vp_ids = check_balance(min_count, threshold);
+	for (auto vp_id : vp_ids) {
+		balance(vp_id);
+	}
+}
+
+int64_t MVPTable::auto_vantage_point(int64_t target) {
+	auto np = count_points();
+	//do we need to add any vantage points?
+	//we want a number of vantage points proportional to the log of the number of points
+	// the ratio is based roughly on the desired partition size (as each VP splits all partitions into 4)
+	int64_t target_nvp = static_cast<int64_t>(std::ceil(std::log(np) / std::log(4 * target)));
+	auto nvp = count_vantage_points();
+	for(auto i = nvp; i < target_nvp; ++i) {
+		insert_vantage_point(find_vantage_point(25));
+	}
+	return target_nvp;
 }
