@@ -274,7 +274,7 @@ namespace imghash {
 		size_t n = std::min(h1.size(), h2.size());
 		size_t d = 0;
 		for (size_t i = 0; i < n; ++i) {
-			d += std::bitset<sizeof(hash_type::value_type)>(h1[i] ^ h2[i]).count();
+			d += std::bitset<8*sizeof(hash_type::value_type)>(h1[i] ^ h2[i]).count();
 		}
 		return static_cast<uint32_t>(d);
 	}
