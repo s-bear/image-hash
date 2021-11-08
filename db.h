@@ -12,10 +12,9 @@ namespace imghash {
 		class Impl;
 		std::unique_ptr<Impl> impl;
 	public:
-		
 		using point_type = Hasher::hash_type;
 		using item_type = std::string;
-		using query_result = std::pair<int32_t, item_type>;
+		using query_result = std::tuple<int32_t, item_type, int32_t>;
 
 		//Open the database
 		Database(const std::string& path);

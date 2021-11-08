@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <string>
 #include <vector>
+#include <tuple>
 
 #ifdef _WIN32
 #include <fcntl.h>
@@ -59,12 +60,46 @@ void print_hash(std::ostream& out, const std::vector<uint8_t>& hash, const std::
 	}
 }
 
+template<class... Types>
+class join_t {
+	using tuple_type = std::tuple<Types...>;
+
+	const std::string delim;
+	const tuple_type& tup;
+
+	template<size_t I>
+	std::enable_if_t< I >= std::tuple_size_v<tuple_type>> print(std::ostream& out) const {}
+
+	template<size_t I>
+	std::enable_if_t< I < std::tuple_size_v<tuple_type>> print(std::ostream& out) const {
+		if (I > 0) out << delim;
+		out << std::get<I>(tup);
+		print<I + 1>(out);
+	}
+	
+public:
+	join_t(const std::string& delim, const std::tuple<Types...>& tup) : delim(delim), tup(tup) {}
+
+	void print(std::ostream& out) const {
+		print<0>(out);
+	}
+};
+
+template<class... Types>
+join_t<Types...> join(const std::string& delim, const std::tuple<Types...>& tup) { return join_t(delim, tup); }
+
+template<class... Types>
+std::ostream& operator << (std::ostream& out, const join_t<Types...>& j) {
+	j.print(out);
+	return out;
+}
+
 #ifdef USE_SQLITE
 void print_query(std::ostream& out, const std::vector<imghash::Database::query_result>& results, 
 	const std::string& prefix = "  ", const std::string& delim = ": ", const std::string& suffix = "\n")
 {
 	for (const auto& res : results) {
-		out << prefix << res.first << delim << res.second << suffix;
+		out << prefix << join(delim, res) << suffix;
 	}
 }
 #endif
