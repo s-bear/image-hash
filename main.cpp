@@ -4,6 +4,7 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
+#include <sstream>
 #include <vector>
 #include <tuple>
 
@@ -48,13 +49,19 @@ void print_version()
 	std::cout << "imghash v0.0.1";
 }
 
+std::string format_hash(const std::vector<uint8_t>& hash) {
+	std::ostringstream oss;
+	oss << std::hex << std::setfill('0');
+	for (auto b : hash) oss << std::setw(2) << int(b);
+	return oss.str();
+}
+
 void print_hash(std::ostream& out, const std::vector<uint8_t>& hash, const std::string& fname, bool binary, bool quiet) {
 	if (binary) {
 		for (auto b : hash) out.put(static_cast<char>(b));
 	}
 	else {
-		out << std::hex << std::setfill('0');
-		for (auto b : hash) out << std::setw(2) << int(b);
+		out << format_hash(hash);
 		if (!quiet) out << " " << fname;
 		out << "\n";
 	}
