@@ -15,6 +15,9 @@ namespace imghash {
 	public:
 		Impl(const std::string& path);
 		void insert(const point_type& point, const item_type& item);
+		void rename(const item_type& item1, const item_type& item2);
+		void remove(const item_type& item);
+		bool exists(const item_type& item);
 		std::vector<query_result> query(const point_type& point, unsigned int dist, size_t limit = 10);
 	};
 
@@ -37,6 +40,19 @@ namespace imghash {
 		impl->insert(point, item);
 	}
 
+	void Database::rename(const item_type& item1, const item_type& item2)
+	{
+		impl->rename(item1, item2);
+	}
+	void Database::remove(const item_type& item)
+	{
+		impl->remove(item);
+	}
+	bool Database::exists(const item_type& item)
+	{
+		return impl->exists(item);
+	}
+
 	//Find similar images
 	std::vector<Database::query_result> Database::query(const point_type& point, unsigned int dist, size_t limit)
 	{
@@ -50,9 +66,10 @@ namespace imghash {
 		db->exec(
 			"CREATE TABLE IF NOT EXISTS images ("
 				"id INTEGER PRIMARY KEY,"
-				"path TEXT UNIQUE,"
+				"path TEXT,"
 				"count INTEGER"
 			");"
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_images_path ON images(path);"
 			"CREATE TABLE IF NOT EXISTS map_images_points ("
 				"image_id INTEGER,"
 				"point_id INTEGER,"
@@ -63,6 +80,39 @@ namespace imghash {
 		);
 	}
 
+	void Database::Impl::rename(const item_type& item1, const item_type& item2) 
+	{
+		auto& stmt = cache["UPDATE images SET path = $new_path WHERE path = $old_path;"];
+		stmt.bind("$new_path", item2);
+		stmt.bind("$old_path", item1);
+		cache.exec(stmt);
+	}
+
+	void Database::Impl::remove(const item_type& item)
+	{
+		auto& sel_id = cache["SELECT id FROM images WHERE path = $path;"];
+		sel_id.bind("$path", item);
+		auto id = cache.exec_getInt64(sel_id, "id");
+		auto& del = cache[
+			"DELETE FROM map_images_points WHERE image_id = $id;"
+			"DELETE FROM images WHERE id = $id;"
+		];
+		del.bind("$id", id);
+		cache.exec(del);
+	}
+	bool Database::Impl::exists(const item_type& item)
+	{
+		auto& sel_id = cache["SELECT id FROM images WHERE path = $path;"];
+		sel_id.bind("$path", item);
+		if (sel_id.executeStep()) {
+			sel_id.reset();
+			return true;
+		}
+		else {
+			sel_id.reset();
+			return false;
+		}
+	}
 	void Database::Impl::insert(const point_type& point, const item_type& path)
 	{
 		// the first point inserted will also be the first vantage point

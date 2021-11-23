@@ -32,7 +32,10 @@ void print_usage() {
 #ifdef USE_SQLITE
 	std::cout << "    --db DB_PATH : use the specified database for --add or --query.\n";
 	std::cout << "    --add : add the image to the database. If the image comes from stdin, --name must be specified.\n";
-	std::cout << "    --query DIST LIMIT: query the database for up to LIMIT similar images within DIST distance.\n";
+	std::cout << "    --query DIST LIMIT : query the database for up to LIMIT similar images within DIST distance.\n";
+	std::cout << "    --remove NAME : remove the name from the database. No input is processed if this is specified.\n";
+	std::cout << "    --rename OLDNAME NEWNAME : change the name of an image in the database. No input is processed if this is specified.\n";
+	std::cout << "    --exists NAME : check if the image has been inserted into the database.\n";
 #endif
 	std::cout << "  Supported image formats: \n";
 #ifdef USE_JPEG
@@ -139,7 +142,10 @@ int main(int argc, const char* argv[])
 	bool add = false;
 	unsigned int query_dist = 0;
 	size_t query_limit = 0;
-	std::string name;
+	bool remove = false;
+	bool rename = false;
+	bool exists = false;
+	std::string name, new_name;
 	
 	//parse options
 	try {
@@ -206,6 +212,37 @@ int main(int argc, const char* argv[])
 						throw std::runtime_error("Missing query distance and/or limit.");
 					}
 				}
+				else if (arg == "--remove") {
+					remove = true;
+					exists = rename = false;
+					if (++i < argc) {
+						name = std::string(argv[i]);
+					}
+					else {
+						throw std::runtime_error("Missing remove name.");
+					}
+				}
+				else if (arg == "--rename") {
+					rename = true;
+					exists = remove = false;
+					if (i + 2 < argc) {
+						name = std::string(argv[++i]);
+						new_name= std::string(argv[++i]);
+					}
+					else {
+						throw std::runtime_error("Missing rename parameters.");
+					}
+				}
+				else if (arg == "--exists") {
+					exists = true;
+					remove = rename = false;
+					if (++i < argc) {
+						name = std::string(argv[i]);
+					}
+					else {
+						throw std::runtime_error("Missing exists name.");
+					}
+				}
 				else {
 					throw std::runtime_error("Unknown option: " + arg);
 				}
@@ -238,16 +275,31 @@ int main(int argc, const char* argv[])
 	//done parsing arguments, now do the processing
 
 	try {
+
+#ifdef USE_SQLITE
+		std::unique_ptr<imghash::Database> db;
+		if (!db_path.empty()) db = std::make_unique<imghash::Database>(db_path);
+
+		if (rename || remove || exists) {
+			if (rename) {
+				db->rename(name, new_name);
+			}
+			else if(remove){
+				db->remove(name);
+			}
+			else if (exists) {
+				if (db->exists(name)) return 0;
+				else return 100;
+			}
+			return 0;
+		}
+#endif
+
 		imghash::Preprocess prep(128, 128);
 
 		std::unique_ptr<imghash::Hasher> hasher;
 		if (use_dct) hasher = std::make_unique<imghash::DCTHasher>(8 * dct_size, even);
 		else hasher = std::make_unique<imghash::BlockHasher>();
-
-#ifdef USE_SQLITE
-		std::unique_ptr<imghash::Database> db;
-		if (!db_path.empty()) db = std::make_unique<imghash::Database>(db_path);
-#endif
 
 		if (files.empty()) {
 			//read from stdin
@@ -290,11 +342,11 @@ int main(int argc, const char* argv[])
 		}
 	}
 	catch (std::exception& e) {
-		std::cerr << "Error while processing image: " << e.what() << std::endl;
+		std::cerr << "Error: " << e.what() << std::endl;
 		return -1;
 	}
 	catch (...) {
-		std::cerr << "Unknown error while processing image." << std::endl;
+		std::cerr << "Unknown error." << std::endl;
 		return -1;
 	}
 

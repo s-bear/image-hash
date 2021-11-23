@@ -23,7 +23,11 @@ namespace imghash {
 		~Database();
 
 		//Add a file
-		void insert(const point_type& point, const item_type& data);
+		void insert(const point_type& point, const item_type& item);
+
+		void rename(const item_type& item1, const item_type& item2);
+		void remove(const item_type& item);
+		bool exists(const item_type& item);
 
 		//Find similar items
 		std::vector<query_result> query(const point_type& point, unsigned int dist, size_t limit = 10);
