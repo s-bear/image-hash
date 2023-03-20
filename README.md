@@ -13,7 +13,7 @@ The DCT based algorithm simply computes the 2D DCT of the pre-processed image, d
 
 If built with `sqlite`, image-hash can build a [Multi-Vantage Point Tree](https://en.wikipedia.org/wiki/Vantage-point_tree) stored in a local database file. The database may be queried for images with exact or similar hashes.
 
-Note that currently any of supported image hash types may be added to the database and they will not be intelligently compared to one another. It is recommended not to specify `-dN`/`--dct N` when using database operations to avoid confusion.
+Note that the database is locked to a single type of hash and will reject queries with alternate hashes specified. Support for searching DCT prefixes may be added eventually.
 
 ## Building
 image-hash and optionally depends on `sqlite`, `libpng` and `libjpeg`. The `vcpkg.json` manifest may be used to collect those libraries automatically.
