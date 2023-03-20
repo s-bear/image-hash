@@ -26,16 +26,16 @@ void print_usage() {
 	std::cout << "  If no FILE is given, reads ppm from stdin\n";
 	std::cout << "  OPTIONS are:\n";
 	std::cout << "    -h, --help : print this message and exit\n";
-	std::cout << "    -dN, --dct N: use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.\n";
+	std::cout << "    -dN, --dct N : use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.\n";
 	std::cout << "    -q, --quiet : don't output filename.\n";
-	std::cout << "    -n NAME, --name NAME: specify a name for output when reading from stdin\n";
+	std::cout << "    -n NAME, --name NAME : specify a name for output when reading from stdin\n";
 #ifdef USE_SQLITE
-	std::cout << "    --db DB_PATH : use the specified database for --add or --query.\n";
+	std::cout << "    --db DB_PATH : use the specified database for add, query, remove, rename, and exists.\n";
 	std::cout << "    --add : add the image to the database. If the image comes from stdin, --name must be specified.\n";
 	std::cout << "    --query DIST LIMIT : query the database for up to LIMIT similar images within DIST distance.\n";
 	std::cout << "    --remove NAME : remove the name from the database. No input is processed if this is specified.\n";
 	std::cout << "    --rename OLDNAME NEWNAME : change the name of an image in the database. No input is processed if this is specified.\n";
-	std::cout << "    --exists NAME : check if the image has been inserted into the database.\n";
+	std::cout << "    --exists NAME : check if an image has been inserted into the database. No input is processed if this is specified.\n";
 #endif
 	std::cout << "  Supported image formats: \n";
 #ifdef USE_JPEG
@@ -253,12 +253,12 @@ int main(int argc, const char* argv[])
 		}
 
 #ifdef USE_SQLITE
-		if (db_path.empty() && (add || query_limit > 0)) {
-			throw std::runtime_error("--add and --query require --db to be specified.");
+		if (db_path.empty() && (add || remove || rename || exists || query_limit > 0)) {
+			throw std::runtime_error("database operations (add, query, remove, rename, exists) require --db to be specified.");
 		}
 #else
-		if (!db_path.empty() || add || query_limit > 0) {
-			throw std::runtime_error("Support for --db, --add, --query was not compiled. Rebuild with USE_SQLITE defined.");
+		if (!db_path.empty() || add || remove || rename || exists || query_limit > 0) {
+			throw std::runtime_error("Support for database operations was not compiled. Rebuild with USE_SQLITE defined.");
 		}
 #endif
 	}
