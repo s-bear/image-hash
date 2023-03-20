@@ -320,10 +320,12 @@ int main(int argc, const char* argv[])
 			while (img.size > 0) {
 				auto hash = hasher->apply(img);
 				print_hash(std::cout, hash, name, binary, quiet);
+				#ifdef USE_SQLITE
 				if (db) {
 					if (add) db->insert(hash, name);
 					if (query_limit > 0) print_query(std::cout, db->query(hash, query_dist, query_limit));
 				}
+				#endif
 				img = load_ppm(stdin, prep, false); //it's OK to get an empty file here
 			}
 		}
@@ -334,10 +336,12 @@ int main(int argc, const char* argv[])
 				
 				auto hash = hasher->apply(img);
 				print_hash(std::cout, hash, file, binary, quiet);
+				#ifdef USE_SQLITE
 				if (db) {
 					if (add) db->insert(hash, file);
 					if (query_limit > 0) print_query(std::cout, db->query(hash, query_dist, query_limit));
 				}
+				#endif
 			}
 		}
 	}
