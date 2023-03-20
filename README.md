@@ -9,6 +9,10 @@ The block-rank algorithm further reduces the image to 20x20 pixels, and folds th
 
 The DCT based algorithm simply computes the 2D DCT of the pre-processed image, discarding the 0-frequency and all odd-frequency components. Each bit of the hash is set if the corresponding DCT coefficient is positive. The bits of the hash are ordered such that including fewer DCT terms produces a prefix of the larger hash. That is, the hash produced by `imghash -d1 photo.jpg` will be a prefix that from `imghash -d2 photo.jpg`.
 
+## Image similarity database
+
+If built with `sqlite`, image-hash can build a [Multi-Vantage Point Tree](https://en.wikipedia.org/wiki/Vantage-point_tree) stored in a local database file. The database may be queried for images with exact or similar hashes.
+
 ## Building
 image-hash and optionally depends on `sqlite`, `libpng` and `libjpeg`. The `vcpkg.json` manifest may be used to collect those libraries automatically.
 
@@ -25,8 +29,15 @@ imghash [OPTIONS] [FILE [FILE ...]]
   If no FILE is given, reads ppm from stdin
   OPTIONS are:
     -h, --help : print this message and exit
-    -dN, --dct N: use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.
+    -dN, --dct N : use dct hash. N may be one of 1,2,3,4 for 64,256,576,1024 bits respectively.
     -q, --quiet : don't output filename.
+    -n NAME, --name NAME : specify a name for output when reading from stdin
+    --db DB_PATH : use the specified database for add, query, remove, rename, and exists.
+    --add : add the image to the database. If the image comes from stdin, --name must be specified.
+    --query DIST LIMIT : query the database for up to LIMIT similar images within DIST distance.
+    --remove NAME : remove the name from the database. No input is processed if this is specified.
+    --rename OLDNAME NEWNAME : change the name of an image in the database. No input is processed if this is specified.
+    --exists NAME : check if an image has been inserted into the database. No input is processed if this is specified.
   Supported file formats: 
     jpeg
     png
