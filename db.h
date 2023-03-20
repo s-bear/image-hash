@@ -22,6 +22,10 @@ namespace imghash {
 		//Close the database
 		~Database();
 
+		//check that the database was created with the given hash type
+		// if no hash type is in the database, (ie. first use) then sets the hash type
+		bool check_hash_type(const std::string& hash_type_str);
+
 		//Add a file
 		void insert(const point_type& point, const item_type& item);
 

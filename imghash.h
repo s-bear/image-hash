@@ -300,12 +300,13 @@ namespace imghash {
 		Hasher();
 		virtual ~Hasher() {}
 		virtual hash_type apply(const Image<float>& image) = 0;
+		virtual const std::string& get_type() const = 0;
 
 		//return true if the hashes are equal up to the length of the shorter hash
 		static bool match(const hash_type& h1, const hash_type& h2);
 		//return true if the hashes match and are the same length
 		static bool equal(const hash_type& h1, const hash_type& h2);
-		
+
 		//bitwise distance, up to the length of the shorter hash
 		static uint32_t hamming_distance(const hash_type& h1, const hash_type& h2);
 
@@ -315,8 +316,10 @@ namespace imghash {
 	//! Block-average hash
 	class BlockHasher : public Hasher
 	{
+		static const std::string type_string;
 	public:
-		hash_type apply(const Image<float>& image);
+		hash_type apply(const Image<float>& image) override;
+		const std::string& get_type() const override;
 	};
 
 	//! Discrete Cosine Transform hash
@@ -363,6 +366,9 @@ namespace imghash {
 
 		bool even_;
 		unsigned N_, M_;
+
+		std::string type_string_;
+
 		//! 1D DCT matrix coefficients
 		std::vector<float> m_;
 		
@@ -391,6 +397,9 @@ namespace imghash {
 		
 		//! Apply the hash function
 		hash_type apply(const Image<float>& image);
+
+		//! Get the hasher's type string
+		const std::string& get_type() const override;
 	};
 
 }

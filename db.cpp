@@ -14,6 +14,8 @@ namespace imghash {
 		MVPTable table;
 	public:
 		Impl(const std::string& path);
+		void set_meta(const std::string& key, const std::string& value);
+		bool get_meta(const std::string& key, std::string& value);
 		void insert(const point_type& point, const item_type& item);
 		void rename(const item_type& item1, const item_type& item2);
 		void remove(const item_type& item);
@@ -32,6 +34,18 @@ namespace imghash {
 	Database::~Database()
 	{
 		//nothing else to do
+	}
+
+	bool Database::check_hash_type(const std::string& hash_type_str)
+	{
+		std::string db_hash_type;
+		if (impl->get_meta("hash_type", db_hash_type)) {
+			return db_hash_type == hash_type_str;
+		}
+		else {
+			impl->set_meta("hash_type", hash_type_str);
+			return true;
+		}
 	}
 
 	//Add a file
@@ -64,6 +78,10 @@ namespace imghash {
 		table(db, Hasher::distance), cache(db)
 	{
 		db->exec(
+			"CREATE TABLE IF NOT EXISTS meta ("
+				"key TEXT UNIQUE,"
+				"value"
+			");"
 			"CREATE TABLE IF NOT EXISTS images ("
 				"id INTEGER PRIMARY KEY,"
 				"path TEXT,"
@@ -78,6 +96,27 @@ namespace imghash {
 				"FOREIGN KEY (point_id) REFERENCES mvp_points(id)"
 			");"
 		);
+	}
+
+	void Database::Impl::set_meta(const std::string& key, const std::string& value) {
+		auto& stmt = cache["REPLACE INTO meta (key, value) VALUES ($key, $value);"];
+		stmt.bind("$key", key);
+		stmt.bind("$value", value);
+		cache.exec(stmt);
+	}
+
+	bool Database::Impl::get_meta(const std::string& key, std::string& value) {
+		auto& stmt = cache["SELECT value FROM meta WHERE key = $key;"];
+		stmt.bind("$key", key);
+		if (stmt.executeStep()) {
+			value = stmt.getColumn(0).getString();
+			stmt.reset();
+			return true;
+		}
+		else {
+			stmt.reset();
+			return false;
+		}
 	}
 
 	void Database::Impl::rename(const item_type& item1, const item_type& item2) 

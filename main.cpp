@@ -301,6 +301,11 @@ int main(int argc, const char* argv[])
 		if (use_dct) hasher = std::make_unique<imghash::DCTHasher>(8 * dct_size, even);
 		else hasher = std::make_unique<imghash::BlockHasher>();
 
+#ifdef USE_SQLITE
+		if (db && !db->check_hash_type(hasher->get_type())) {
+			throw std::runtime_error("Database hash type mismatch");
+		}
+#endif
 		if (files.empty()) {
 			//read from stdin
 #ifdef _WIN32

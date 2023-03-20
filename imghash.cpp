@@ -4,6 +4,7 @@
 #include "imghash.h"
 
 #include <fstream>
+#include <sstream>
 #include <cstdio>
 #include <bitset>
 #include <algorithm>
@@ -337,13 +338,26 @@ namespace imghash {
 		return bytes;
 	}
 
+	const std::string BlockHasher::type_string = "BLOCK";
+
+	const std::string& BlockHasher::get_type() const {
+		return type_string;
+	}
+
 	DCTHasher::DCTHasher(unsigned M, bool even)
 		: N_(128), M_(M), even_(even), m_(mat(N_, M_, even_))
 	{
-		//nothing to do
+		std::ostringstream oss;
+		oss << "DCT" << M;
+		if (even) oss << "E";
+		type_string_ = oss.str();
 	}
 
 	DCTHasher::DCTHasher() : DCTHasher(8, false) {}
+
+	const std::string& DCTHasher::get_type() const {
+		return type_string_;
+	}
 
 	std::vector<float> DCTHasher::mat(unsigned N, unsigned M)
 	{
