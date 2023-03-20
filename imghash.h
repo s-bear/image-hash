@@ -217,8 +217,11 @@ namespace imghash {
 		static constexpr size_t hist_bins = 256;
 
 		Image<float> img;
-		std::vector<size_t> hist, tile_w, tile_h;
-		size_t in_h, in_w, in_c, y, i, ty;
+		std::vector<size_t> hist; //histogram
+		std::vector<size_t> tile_w, tile_h; //tile sizes for resizing
+		size_t in_h, in_w, in_c; //input height, width, channels
+		size_t y, i; // the current image row, and pixel index
+		size_t ty; //the current row within the tile (downsampling) or tile within the image (upsampling)
 	public:
 		
 		Preprocess();
@@ -262,14 +265,15 @@ namespace imghash {
 			else {
 				std::vector<float> tmp(img.width * img.channels, 0);
 				resize_row<RowT, float, float>(in_c, in_w, input_row, img.width, tmp.data(), tile_w, false, hist);
-				size_t th = tile_h[y];
-				for (ty = 0; ty < th; ++ty, ++y, i += img.row_size) {
+				size_t th = tile_h[ty++];
+				for (size_t k = 0; k < th; ++k, ++y, i += img.row_size) {
 					for (size_t x = 0, j = 0; x < img.width; ++x) {
 						for (size_t c = 0; c < img.channels; ++c, ++j) {
 							img[i + j] = tmp[j];
 						}
 					}
 				}
+
 			}
 			//do we need more rows?
 			return y < img.height;
