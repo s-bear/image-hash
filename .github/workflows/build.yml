@@ -20,10 +20,6 @@ jobs:
             triplet: x64-linux
             build-preset: linux-x64-release
             pack-preset: linux-x64
-          - os: macos-latest
-            triplet: x64-osx
-            build-preset: osx-x64-release
-            pack-preset: osx-x64
           - os: windows-latest
             triplet: x64-windows-static
             build-preset: windows-x64-release
