@@ -1,6 +1,7 @@
 
 #include "mvptable.h"
 #include <sqlite3.h>
+#include <cmath>
 #include <algorithm>
 #include <cassert>
 
