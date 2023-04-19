@@ -20,10 +20,12 @@ jobs:
             triplet: x64-linux
             build-preset: linux-x64-release
             pack-generator: TGZ
+            pack-preset: linux-x64
           - os: windows-latest
             triplet: x64-windows-static
             build-preset: windows-x64-release
             pack-generator: ZIP
+            pack-preset: windows-x64
     steps:
       - uses: actions/checkout@v3
       - uses: lukka/get-cmake@latest
@@ -31,7 +33,7 @@ jobs:
         uses: lukka/run-vcpkg@main
         with:
           vcpkgGitCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1'
-          vcpkgDirectory: '${{runner.workspace}}/out/vcpkg'
+          vcpkgDirectory: '${{runner.workspace}}/vcpkg'
       - name: Run CMake
         uses: lukka/run-cmake@main
         with:
@@ -40,5 +42,7 @@ jobs:
           buildPreset: '${{matrix.build-preset}}'
           buildPresetAdditionalArgs: ""
       - name: Run CPack
-        run: "cpack -G ${{matrix.pack-generator}} -C Release -V"
-        working-directory: '${{runner.workspace}}/image-hash/out/build/${{matrix.build-preset}}'
+        run: "cpack --preset ${{matrix.pack-preset}}"
+        working-directory: '${{runner.workspace}}/image-hash'
+        #run: "cpack -G ${{matrix.pack-generator}} -C Release -V"
+        #working-directory: '${{runner.workspace}}/image-hash/out/build/${{matrix.build-preset}}'
