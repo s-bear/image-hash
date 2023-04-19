@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <bitset>
 #include <algorithm>
+#include <array>
 
 #ifdef max
 #undef max
@@ -38,6 +39,63 @@ namespace imghash {
 	}
 	template<> uint16_t convert_pix<uint16_t>(float p) {
 		return static_cast<uint16_t>(p * 65535.9999f); //we could use nextafter(65536, 0) but it might not be optimized away
+	}
+
+	//compute the first principal component of xx
+	template<size_t N, size_t M>
+	std::array<float, N> pca_1(const std::array<float, N*M>& xx, double tol = 1e-6, size_t limit = 100)
+	{
+		std::array<double, N> o, r, s;
+		double v = 0.0f; //the candidate eigenvalue
+		
+		//r is the candidate eigenvector, and should ideally by initialized to a random unit vector, but we don't care that much here
+		std::fill(std::begin(r), std::end(r), 1.0/sqrt(static_cast<double>(N)));
+		//o is the data offset -- set here to the mean of xx
+		std::fill(std::begin(o), std::end(o), 0.0);
+		for (size_t j = 0; j < M; ++j) {
+			for (size_t k = 0; k < N; ++k) {
+				o[k] += xx[N * j + k];
+			}
+		}
+		for (size_t k = 0; k < N; ++k) {
+			o[k] /= M;
+		}
+		for (size_t i = 0; i < limit; ++i) {
+			std::fill(std::begin(s), std::end(s), 0.0);
+			for (size_t j = 0; j < M; ++j) {
+				//p = dot(xx[j], r)
+				double p = 0.0;
+				for (size_t k = 0; k < N; ++k) {
+					p += (xx[N * j + k] - o[k]) * r[k];
+				}
+				// s += p*x
+				for (size_t k = 0; k < N; ++k) {
+					s[k] += p * (xx[N * j + k] - o[k]);
+				}
+			}
+			// v = dot(r, s)
+			v = 0.0;
+			for (size_t k = 0; k < N; ++k) {
+				v += r[k] * s[k];
+			}
+			//err = || v*r - s ||^2
+			double err = 0.0;
+			double s_norm = 0.0;
+			for (size_t k = 0; k < N; ++k) {
+				err += pow(v * r[k] - s[k], 2);
+				s_norm += pow(s[k], 2);
+			}
+			// r = s / norm(s)
+			for (size_t k = 0; k < N; ++k) {
+				r[k] = s[k] / s_norm;
+			}
+			if (err < tol) break;
+		}
+
+		//cast to float for return
+		std::array<float, N> rf;
+		for (size_t i = 0; i < N; ++i) rf[i] = static_cast<float>(r[i]);
+		return rf;
 	}
 
 	void save(const std::string& fname, const Image<float>& img, float vmax)
