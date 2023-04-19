@@ -19,10 +19,13 @@ jobs:
         include:
           - os: ubuntu-latest
             triplet: x64-linux-static
+            preset: linux-x64-release
           - os: macos-latest
             triplet: x64-osx-static
+            preset: osx-x64-release
           - os: windows-latest
             triplet: x64-windows-static
+            preset: windows-x64-release
     env:
       VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
       BUILD_TYPE: Release
@@ -32,12 +35,13 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@main
         with:
-          vcpkgGitCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1'
+          vcpkgCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1'
           vcpkgDirectory: '${{ runner.workspace }}/b/vcpkg'
       - name: Run CMake
         uses: lukka/run-cmake@main
         with:
-          configurePreset: ninja-multi-vcpkg
-          buildPreset: ninja-multi-vcpkg
-
-
+          configurePreset: '${{ matrix.preset }}'
+          configurePresetAdditionalArgs: ""
+          buildPreset: '${{ matrix.preset }}'
+          buildPresetAdditionalArgs: ""
+          
