@@ -1,8 +1,7 @@
 name: Build with CMake and vcpkg
 
-on:
-  push:
-    branches: [ "main" ]
+on: workflow_dispatch
+#push: branches: [ "main" ]
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -15,20 +14,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
         include:
           - os: ubuntu-latest
-            triplet: x64-linux-static
-            preset: linux-x64-release
-          - os: macos-latest
-            triplet: x64-osx-static
-            preset: osx-x64-release
+            triplet: x64-linux
+            build-preset: linux-x64-release
+            pack-preset: linux-x64
           - os: windows-latest
             triplet: x64-windows-static
-            preset: windows-x64-release
-    env:
-      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
-      BUILD_TYPE: Release
+            build-preset: windows-x64-release
+            pack-preset: windows-x64
     steps:
       - uses: actions/checkout@v3
       - uses: lukka/get-cmake@latest
@@ -40,8 +35,9 @@ jobs:
       - name: Run CMake
         uses: lukka/run-cmake@main
         with:
-          configurePreset: '${{ matrix.preset }}'
-          configurePresetAdditionalArgs: ""
-          buildPreset: '${{ matrix.preset }}'
+          configurePreset: '${{ matrix.build-preset }}'
+          configurePresetAdditionalArgs: "['-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}']"
+          buildPreset: '${{ matrix.build-preset }}'
           buildPresetAdditionalArgs: ""
-          
+      - name: Run CPack
+        run: "cpack --preset ${{ matrix.pack-preset }}"
