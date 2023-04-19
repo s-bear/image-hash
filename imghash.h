@@ -311,7 +311,10 @@ namespace imghash {
 	//! Block-average hash
 	class BlockHasher : public Hasher
 	{
+	protected:
+		bool even;
 	public:
+		BlockHasher(bool even);
 		hash_type apply(const Image<float>& image);
 	};
 

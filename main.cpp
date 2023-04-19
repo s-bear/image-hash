@@ -242,7 +242,7 @@ int main(int argc, const char* argv[])
 
 		std::unique_ptr<imghash::Hasher> hasher;
 		if (use_dct) hasher = std::make_unique<imghash::DCTHasher>(8 * dct_size, even);
-		else hasher = std::make_unique<imghash::BlockHasher>();
+		else hasher = std::make_unique<imghash::BlockHasher>(even);
 
 #ifdef USE_SQLITE
 		std::unique_ptr<imghash::Database> db;

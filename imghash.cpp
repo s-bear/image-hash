@@ -283,23 +283,32 @@ namespace imghash {
 		return hamming_distance(h1, h2);
 	}
 
+	BlockHasher::BlockHasher(bool even) : even(even) 
+	{
+		//nothing else to do
+	}
+
 	std::vector<uint8_t> BlockHasher::apply(const Image<float>& image)
 	{
 		const size_t N = 8;
 		const size_t M = N + 2;
-		Image<float> tmp(2*M, 2*M);
+		const size_t tmp_size = even ? 2 * M : M;
+		Image<float> tmp(tmp_size, tmp_size, image.channels);
 		resize(image, tmp);
 
-		//fold the 4 quadrants into the top left
-		for (size_t y = 0, i = 0, im = tmp.index(2*M-1,0,0);
-			 y < M;
-			 ++y, i += tmp.row_size, im -= tmp.row_size)
-		{
-			for (size_t x = 0, xm = tmp.index(0,2*M-1,0);
-				 x < M;
-				 ++x, --xm)
+		if (even) {
+			//fold the 4 quadrants into the top left
+			for (size_t y = 0, i = 0, im = tmp.index(2 * M - 1, 0, 0);
+				y < M;
+				++y, i += tmp.row_size, im -= tmp.row_size)
 			{
-				tmp[i + x] += tmp[i + xm] + tmp[im + x] + tmp[im + xm];
+				for (size_t x = 0, j = 0, jm = tmp.index(0, 2 * M - 1, tmp.channels - 1);
+					x < M; ++x)
+				{
+					for (size_t c = 0; c < tmp.channels; ++c, ++j, --jm) {
+						tmp[i + j] += tmp[i + jm] + tmp[im + j] + tmp[im + jm];
+					}
+				}
 			}
 		}
 
