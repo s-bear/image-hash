@@ -40,4 +40,6 @@ set(features "${features} SQLITE")
 endif()
 
 message(STATUS "Compiling with features: ${features}")
+
+install(TARGETS imghash)
 # TODO: Add tests and install targets if needed.
