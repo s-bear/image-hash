@@ -18,13 +18,16 @@ jobs:
         include:
           - os: ubuntu-latest
             triplet: x64-linux
-            preset: linux-x64-release
+            build-preset: linux-x64-release
+            pack-preset: linux-x64
           - os: macos-latest
             triplet: x64-osx
-            preset: osx-x64-release
+            build-preset: osx-x64-release
+            pack-preset: osx-x64
           - os: windows-latest
             triplet: x64-windows-static
-            preset: windows-x64-release
+            build-preset: windows-x64-release
+            pack-preset: windows-x64
     steps:
       - uses: actions/checkout@v3
       - uses: lukka/get-cmake@latest
@@ -36,8 +39,9 @@ jobs:
       - name: Run CMake
         uses: lukka/run-cmake@main
         with:
-          configurePreset: '${{ matrix.preset }}'
+          configurePreset: '${{ matrix.build-preset }}'
           configurePresetAdditionalArgs: "['-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}']"
-          buildPreset: '${{ matrix.preset }}'
+          buildPreset: '${{ matrix.build-preset }}'
           buildPresetAdditionalArgs: ""
-          
+      - name: Run CPack
+        run: "cpack --preset ${{ matrix.pack-preset }}"
