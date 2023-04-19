@@ -322,7 +322,7 @@ namespace imghash {
 			for (size_t x = 0;  x < N; ++x)
 			{
 				//we want the rank of the pixel in the center of the 3x3 neighborhood
-				float p = tmp[i1 + x + 1];
+				auto p = tmp[i1 + x + 1];
 
 				//get the surrounding 8 pixels
 				auto p00 = tmp[i0 + x];
