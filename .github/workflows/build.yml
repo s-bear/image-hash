@@ -19,11 +19,11 @@ jobs:
           - os: ubuntu-latest
             triplet: x64-linux
             build-preset: linux-x64-release
-            pack-preset: linux-x64
+            pack-generator: TGZ
           - os: windows-latest
             triplet: x64-windows-static
             build-preset: windows-x64-release
-            pack-preset: windows-x64
+            pack-generator: ZIP
     steps:
       - uses: actions/checkout@v3
       - uses: lukka/get-cmake@latest
@@ -40,4 +40,4 @@ jobs:
           buildPreset: '${{ matrix.build-preset }}'
           buildPresetAdditionalArgs: ""
       - name: Run CPack
-        run: "cpack --preset ${{ matrix.pack-preset }}"
+        run: "cpack -G ${{ matrix.pack-generator }} -C Release -V"
