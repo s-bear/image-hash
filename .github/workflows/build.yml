@@ -32,7 +32,7 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@main
         with:
-          vcpkgCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1'
+          vcpkgGitCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1'
           vcpkgDirectory: '${{ runner.workspace }}/b/vcpkg'
       - name: Run CMake
         uses: lukka/run-cmake@main
