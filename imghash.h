@@ -219,10 +219,11 @@ namespace imghash {
 		Image<float> img;
 		std::vector<size_t> hist, tile_w, tile_h;
 		size_t in_h, in_w, in_c, y, i, ty;
+		bool grayscale;
 	public:
 		
 		Preprocess();
-		Preprocess(size_t w, size_t h);
+		Preprocess(size_t w, size_t h, bool grayscale);
 
 		//by row:
 		void start(size_t input_height, size_t input_width, size_t input_channels);

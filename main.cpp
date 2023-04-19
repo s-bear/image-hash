@@ -238,7 +238,7 @@ int main(int argc, const char* argv[])
 	//done parsing arguments, now do the processing
 
 	try {
-		imghash::Preprocess prep(128, 128);
+		imghash::Preprocess prep(128, 128, true);
 
 		std::unique_ptr<imghash::Hasher> hasher;
 		if (use_dct) hasher = std::make_unique<imghash::DCTHasher>(8 * dct_size, even);

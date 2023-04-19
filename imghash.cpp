@@ -486,13 +486,15 @@ namespace imghash {
 		return sizes;
 	}
 
-	Preprocess::Preprocess(size_t w, size_t h)
-		: img(h,w,3), hist(), y(0), i(0), ty(0), in_w(0), in_h(0), in_c(0)
+	Preprocess::Preprocess(size_t w, size_t h, bool grayscale)
+		: img(h,w,3), hist(), tile_w(), tile_h(),
+		in_h(0), in_w(0), in_c(0), y(0), i(0), ty(0),
+		grayscale(grayscale)
 	{
 		//nothing else to do
 	}
 
-	Preprocess::Preprocess() : Preprocess(0, 0)
+	Preprocess::Preprocess() : Preprocess(0, 0, 0)
 	{
 		//nothing else to do
 	}
@@ -537,24 +539,44 @@ namespace imghash {
 			}
 		}
 
-		Image<float> out(img.height, img.width, 1);
-		//apply the equalization, storing the result in out
-		for (size_t out_y = 0, out_i = 0, img_i = 0;
-			 out_y < out.height;
-			 ++out_y, out_i += out.row_size, img_i += img.row_size)
-		{
-			for (size_t out_x = 0, out_j = out_i, img_j = img_i; out_x < out.width; ++out_x, ++out_j)
+		if (grayscale) {
+			Image<float> out(img.height, img.width, 1);
+			//apply the equalization and convert to grayscale
+			for (size_t out_y = 0, out_i = 0, img_i = 0;
+				out_y < out.height;
+				++out_y, out_i += out.row_size, img_i += img.row_size)
 			{
-				float sum = 0.0f;
-				for (size_t c = 0; c < img.channels; ++c, ++img_j)
+				for (size_t out_x = 0, out_j = out_i, img_j = img_i; out_x < out.width; ++out_x, ++out_j)
 				{
-					auto p = img[img_j];
-					sum += lut[c * hist_bins + convert_pix<uint8_t>(p)];
+					float sum = 0.0f;
+					for (size_t c = 0; c < img.channels; ++c, ++img_j)
+					{
+						auto p = img[img_j];
+						sum += lut[c * hist_bins + convert_pix<uint8_t>(p)];
+					}
+					out[out_j] = sum;
 				}
-				out[out_j] = sum;
 			}
+			return out;
 		}
-		return out;
+		else {
+			Image<float> out(img.height, img.width, img.channels);
+			//apply the equalization
+			for (size_t out_y = 0, out_i = 0, img_i = 0;
+				out_y < out.height;
+				++out_y, out_i += out.row_size, img_i += img.row_size)
+			{
+				for (size_t out_x = 0, out_j = out_i, img_j = img_i; out_x < out.width; ++out_x)
+				{
+					for (size_t c = 0; c < img.channels; ++c, ++img_j, ++out_j)
+					{
+						auto p = img[img_j];
+						out[out_j] = lut[c * hist_bins + convert_pix<uint8_t>(p)];
+					}
+				}
+			}
+			return out;
+		}
 	}
 
 	Image<float> Preprocess::apply(const Image<uint8_t>& input)
