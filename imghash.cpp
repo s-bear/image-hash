@@ -97,9 +97,9 @@ namespace imghash {
 	bool test_ppm(FILE* file) {
 		unsigned char magic[2] = { 0 };
 		auto off = ftell(file);
-		fread(magic, sizeof(unsigned char), 2, file);
+		size_t n = fread(magic, sizeof(unsigned char), 2, file);
 		fseek(file, off, SEEK_SET);
-		return (magic[0] == 'P') && (magic[1] == '6');
+		return (n == 2) && (magic[0] == 'P') && (magic[1] == '6');
 	}
 
 	Image<float> load_ppm(FILE* file, Preprocess& prep, bool empty_error)
