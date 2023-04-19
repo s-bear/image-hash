@@ -44,5 +44,7 @@ jobs:
       - name: Run CPack
         run: "cpack --preset ${{matrix.pack-preset}}"
         working-directory: '${{runner.workspace}}/image-hash'
-        #run: "cpack -G ${{matrix.pack-generator}} -C Release -V"
-        #working-directory: '${{runner.workspace}}/image-hash/out/build/${{matrix.build-preset}}'
+      - name: Upload package
+        uses: actions/upload-artifact@v3
+        with:
+          path: '${{runner.workspace}}/image-hash/out/package/*'
