@@ -18,10 +18,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - os: ubuntu-latest
-            triplet: x64-linux-static
+            triplet: x64-linux
             preset: linux-x64-release
           - os: macos-latest
-            triplet: x64-osx-static
+            triplet: x64-osx
             preset: osx-x64-release
           - os: windows-latest
             triplet: x64-windows-static
