@@ -46,7 +46,7 @@ void print_usage() {
 
 void print_version()
 {
-	std::cout << "imghash v0.0.1";
+	std::cout << "imghash v0.1.0";
 }
 
 std::string format_hash(const std::vector<uint8_t>& hash) {
