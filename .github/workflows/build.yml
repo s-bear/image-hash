@@ -41,3 +41,4 @@ jobs:
           buildPresetAdditionalArgs: ""
       - name: Run CPack
         run: "cpack -G ${{ matrix.pack-generator }} -C Release -V"
+        working-directory: '${{ runner.workspace }}/out/build/${{build-preset}}'
