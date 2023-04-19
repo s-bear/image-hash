@@ -26,9 +26,6 @@ jobs:
           - os: windows-latest
             triplet: x64-windows-static
             preset: windows-x64-release
-    env:
-      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
-      BUILD_TYPE: Release
     steps:
       - uses: actions/checkout@v3
       - uses: lukka/get-cmake@latest
@@ -41,7 +38,7 @@ jobs:
         uses: lukka/run-cmake@main
         with:
           configurePreset: '${{ matrix.preset }}'
-          configurePresetAdditionalArgs: ""
+          configurePresetAdditionalArgs: "['-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}']"
           buildPreset: '${{ matrix.preset }}'
           buildPresetAdditionalArgs: ""
           
