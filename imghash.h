@@ -396,7 +396,7 @@ namespace imghash {
 		DCTHasher(unsigned M, bool even);
 		
 		//! Apply the hash function
-		hash_type apply(const Image<float>& image);
+		hash_type apply(const Image<float>& image) override;
 
 		//! Get the hasher's type string
 		const std::string& get_type() const override;
