@@ -236,19 +236,19 @@
     {
       "name": "linux-x64",
       "inherits": "common-base",
-      "generators": [ "tgz" ],
+      "generators": [ "TGZ" ],
       "configurePreset": "linux-x64-release"
     },
     {
       "name": "windows-x64",
       "inherits": "common-base",
-      "generators": [ "zip" ],
+      "generators": [ "ZIP" ],
       "configurePreset": "windows-x64-release"
     },
     {
       "name": "osx-x64",
       "inherits": "common-base",
-      "generators": [ "zip" ],
+      "generators": [ "ZIP" ],
       "configurePreset": "osx-x64-release"
     }
   ]
