@@ -42,4 +42,6 @@ endif()
 message(STATUS "Compiling with features: ${features}")
 
 install(TARGETS imghash)
+include(CPack)
+
 # TODO: Add tests and install targets if needed.

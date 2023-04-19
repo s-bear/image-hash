@@ -226,5 +226,30 @@
       "configurePreset": "osx-x64-release"
     }
   ],
-  "testPresets": []
+  "testPresets": [],
+  "packagePresets": [
+    {
+      "name": "common-base",
+      "hidden": true,
+      "packageDirectory": "${sourceDir}/out/package/${presetName}"
+    },
+    {
+      "name": "linux-x64",
+      "inherits": "common-base",
+      "generators": [ "tgz" ],
+      "configurePreset": "linux-x64-release"
+    },
+    {
+      "name": "windows-x64",
+      "inherits": "common-base",
+      "generators": [ "zip" ],
+      "configurePreset": "windows-x64-release"
+    },
+    {
+      "name": "osx-x64",
+      "inherits": "common-base",
+      "generators": [ "zip" ],
+      "configurePreset": "osx-x64-release"
+    }
+  ]
 }
