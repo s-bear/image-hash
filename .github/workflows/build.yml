@@ -1,8 +1,7 @@
 name: Build with CMake and vcpkg
 
-on:
-  push:
-    branches: [ "main" ]
+on: workflow_dispatch
+#push: branches: [ "main" ]
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
