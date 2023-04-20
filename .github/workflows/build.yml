@@ -14,16 +14,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        build-preset: [linux-x64-release, windows-x64-release, windows-x86-release]
         include:
-          - os: ubuntu-latest
-            build-preset: linux-x64-release
+          - build-preset: linux-x64-release
+            os: ubuntu-latest
             pack-preset: linux-x64
-          - os: windows-latest
-            build-preset: windows-x64-release
+          - build-preset: windows-x64-release
+            os: windows-latest
             pack-preset: windows-x64
-          - os: windows-latest
-            build-preset: windows-x86-release
+          - build-preset: windows-x86-release
+            os: windows-latest
             pack-preset: windows-x86
     steps:
       - uses: actions/checkout@v3
