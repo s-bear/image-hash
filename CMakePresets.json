@@ -256,6 +256,12 @@
       "configurePreset": "windows-x64-release"
     },
     {
+      "name": "windows-x86",
+      "inherits": "common-base",
+      "generators": [ "ZIP" ],
+      "configurePreset": "windows-x86-release"
+    },
+    {
       "name": "osx-x64",
       "inherits": "common-base",
       "generators": [ "ZIP" ],
