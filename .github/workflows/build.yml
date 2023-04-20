@@ -17,15 +17,14 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         include:
           - os: ubuntu-latest
-            triplet: x64-linux
             build-preset: linux-x64-release
-            pack-generator: TGZ
             pack-preset: linux-x64
           - os: windows-latest
-            triplet: x64-windows-static
             build-preset: windows-x64-release
-            pack-generator: ZIP
             pack-preset: windows-x64
+          - os: windows-latest
+            build-preset: windows-x86-release
+            pack-preset: windows-x86
     steps:
       - uses: actions/checkout@v3
       - uses: lukka/get-cmake@latest
