@@ -37,7 +37,7 @@ jobs:
         uses: lukka/run-cmake@main
         with:
           configurePreset: '${{matrix.build-preset}}'
-          configurePresetAdditionalArgs: "['-DVCPKG_TARGET_TRIPLET=${{matrix.triplet}}']"
+          configurePresetAdditionalArgs: ""
           buildPreset: '${{matrix.build-preset}}'
           buildPresetAdditionalArgs: ""
       - name: Run CPack
