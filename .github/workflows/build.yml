@@ -9,8 +9,8 @@ env:
 
 jobs:
   job:
-    name: ${{ matrix.os }}-${{ github.workflow }}
-    runs-on: ${{ matrix.os }}
+    name: ${{matrix.os}}-${{github.workflow}}
+    runs-on: ${{matrix.os}}
     strategy:
       fail-fast: false
       matrix:
@@ -19,10 +19,12 @@ jobs:
           - os: ubuntu-latest
             triplet: x64-linux
             build-preset: linux-x64-release
+            pack-generator: TGZ
             pack-preset: linux-x64
           - os: windows-latest
             triplet: x64-windows-static
             build-preset: windows-x64-release
+            pack-generator: ZIP
             pack-preset: windows-x64
     steps:
       - uses: actions/checkout@v3
@@ -31,13 +33,19 @@ jobs:
         uses: lukka/run-vcpkg@main
         with:
           vcpkgGitCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1'
-          vcpkgDirectory: '${{ runner.workspace }}/out/vcpkg'
+          vcpkgDirectory: '${{runner.workspace}}/vcpkg'
       - name: Run CMake
         uses: lukka/run-cmake@main
         with:
-          configurePreset: '${{ matrix.build-preset }}'
-          configurePresetAdditionalArgs: "['-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}']"
-          buildPreset: '${{ matrix.build-preset }}'
+          configurePreset: '${{matrix.build-preset}}'
+          configurePresetAdditionalArgs: "['-DVCPKG_TARGET_TRIPLET=${{matrix.triplet}}']"
+          buildPreset: '${{matrix.build-preset}}'
           buildPresetAdditionalArgs: ""
       - name: Run CPack
-        run: "cpack --preset ${{ matrix.pack-preset }}"
+        run: "cpack --preset ${{matrix.pack-preset}} -P ${{matrix.pack-preset}}"
+        working-directory: '${{runner.workspace}}/image-hash'
+      - name: Upload package as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: '${{matrix.pack-preset}}'
+          path: '${{runner.workspace}}/image-hash/out/package/${{matrix.pack-preset}}/*.*'
