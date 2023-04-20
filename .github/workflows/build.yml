@@ -47,5 +47,5 @@ jobs:
       - name: Upload package as artifact
         uses: actions/upload-artifact@v3
         with:
-          name: '${{matrix.pack-preset}}'
+          name: builds
           path: '${{runner.workspace}}/image-hash/out/package/${{matrix.pack-preset}}/*.*'
