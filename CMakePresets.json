@@ -89,6 +89,10 @@
         "value": "x86",
         "strategy": "external"
       },
+      "toolset": {
+        "value": "host=x86",
+        "strategy": "external"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
@@ -113,6 +117,10 @@
       "displayName": "x86 Release",
       "architecture": {
         "value": "x86",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86",
         "strategy": "external"
       },
       "cacheVariables": {
