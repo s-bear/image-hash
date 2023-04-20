@@ -42,9 +42,10 @@ jobs:
           buildPreset: '${{matrix.build-preset}}'
           buildPresetAdditionalArgs: ""
       - name: Run CPack
-        run: "cpack --preset ${{matrix.pack-preset}}"
+        run: "cpack --preset ${{matrix.pack-preset}} -P ${{matrix.pack-preset}}"
         working-directory: '${{runner.workspace}}/image-hash'
-      - name: Upload package
+      - name: Upload package as artifact
         uses: actions/upload-artifact@v3
         with:
-          path: '${{runner.workspace}}/image-hash/out/package/*'
+          name: '${{matrix.pack-preset}}'
+          path: '${{runner.workspace}}/image-hash/out/package/*.*'
