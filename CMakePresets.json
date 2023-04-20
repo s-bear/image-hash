@@ -20,6 +20,9 @@
         "lhs": "${hostSystemName}",
         "rhs": "Linux"
       },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
+      },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
           "hostOS": [ "Linux" ] 
@@ -57,6 +60,9 @@
       "name": "windows-base",
       "hidden": true,
       "inherits": "common-base",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      },
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -96,7 +102,9 @@
         "strategy": "external"
       },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "LINK_STATIC": "ON"
       }
     },
     {
@@ -108,7 +116,9 @@
         "strategy": "external"
       },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x86-windows-static",
+        "LINK_STATIC": "ON"
       }
     },
     {

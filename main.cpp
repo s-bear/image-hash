@@ -150,7 +150,7 @@ int main(int argc, const char* argv[])
 	//parse options
 	try {
 		//TODO: use a proper options parsing library
-		for (size_t i = 1; i < argc; ++i) {
+		for (int i = 1; i < argc; ++i) {
 			auto arg = std::string(argv[i]);
 			if (arg[0] == '-') {
 				if (arg == "-h" || arg == "--help") {

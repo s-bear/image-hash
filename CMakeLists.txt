@@ -4,7 +4,10 @@
 cmake_minimum_required (VERSION 3.8)
 
 cmake_policy(SET CMP0091 NEW)
+set(LINK_STATIC OFF CACHE BOOL "Use statically linked libraries on windows.")
+if(LINK_STATIC)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 project (imghash)
 

@@ -149,7 +149,8 @@ namespace imghash {
 				throw std::runtime_error("PPM: Unexpected EOF");
 			}
 			buffer[i] = 0;
-			x = atoll(buffer);
+			long long b = atoll(buffer); // b >= 0 because we only add digits to the buffer (no leading -)
+			x = static_cast<size_t>(b); //TODO: check for overflow
 			return c;
 		};
 				
