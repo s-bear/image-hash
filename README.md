@@ -16,7 +16,7 @@ If built with `sqlite`, image-hash can build a [Multi-Vantage Point Tree](https:
 Note that the database is locked to a single type of hash and will reject queries with alternate hashes specified. Support for searching DCT prefixes may be added eventually.
 
 ## Building
-image-hash optionally depends on `sqlite`, `libpng` and `libjpeg`. The project is set up to use [vcpkg][https://vcpkg.io/] to collect those libraries automatically.
+image-hash optionally depends on `sqlite`, `libpng` and `libjpeg`. The project is set up to use [vcpkg](https://vcpkg.io/) to collect those libraries automatically.
 
 Build using `cmake`. The code has only been tested on Windows with MSVC 2019 and MSVC 2022.
 
