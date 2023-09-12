@@ -87,6 +87,10 @@
         "value": "x86",
         "strategy": "external"
       },
+      "toolset": {
+        "value": "host=x86",
+        "strategy": "external"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "VCPKG_TARGET_TRIPLET": "x86-windows"
@@ -112,6 +116,10 @@
       "displayName": "x86 Release",
       "architecture": {
         "value": "x86",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86",
         "strategy": "external"
       },
       "cacheVariables": {

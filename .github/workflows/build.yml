@@ -14,18 +14,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        build-preset: [linux-x64-release, windows-x64-release, windows-x86-release]
         include:
-          - os: ubuntu-latest
-            triplet: x64-linux
-            build-preset: linux-x64-release
-            pack-generator: TGZ
+          - build-preset: linux-x64-release
+            os: ubuntu-latest
             pack-preset: linux-x64
-          - os: windows-latest
-            triplet: x64-windows-static
-            build-preset: windows-x64-release
-            pack-generator: ZIP
+          - build-preset: windows-x64-release
+            os: windows-latest
             pack-preset: windows-x64
+          - build-preset: windows-x86-release
+            os: windows-latest
+            pack-preset: windows-x86
     steps:
       - uses: actions/checkout@v3
       - uses: lukka/get-cmake@latest
@@ -38,7 +37,7 @@ jobs:
         uses: lukka/run-cmake@main
         with:
           configurePreset: '${{matrix.build-preset}}'
-          configurePresetAdditionalArgs: "['-DVCPKG_TARGET_TRIPLET=${{matrix.triplet}}']"
+          configurePresetAdditionalArgs: ""
           buildPreset: '${{matrix.build-preset}}'
           buildPresetAdditionalArgs: ""
       - name: Run CPack
