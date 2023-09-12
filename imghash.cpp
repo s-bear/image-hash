@@ -4,6 +4,7 @@
 #include "imghash.h"
 
 #include <fstream>
+#include <sstream>
 #include <cstdio>
 #include <bitset>
 #include <algorithm>
@@ -154,9 +155,9 @@ namespace imghash {
 	bool test_ppm(FILE* file) {
 		unsigned char magic[2] = { 0 };
 		auto off = ftell(file);
-		fread(magic, sizeof(unsigned char), 2, file);
+		size_t n = fread(magic, sizeof(unsigned char), 2, file);
 		fseek(file, off, SEEK_SET);
-		return (magic[0] == 'P') && (magic[1] == '6');
+		return (n == 2) && (magic[0] == 'P') && (magic[1] == '6');
 	}
 
 	Image<float> load_ppm(FILE* file, Preprocess& prep, bool empty_error)
@@ -206,7 +207,8 @@ namespace imghash {
 				throw std::runtime_error("PPM: Unexpected EOF");
 			}
 			buffer[i] = 0;
-			x = atoll(buffer);
+			long long b = atoll(buffer); // b >= 0 because we only add digits to the buffer (no leading -)
+			x = static_cast<size_t>(b); //TODO: check for overflow
 			return c;
 		};
 				
@@ -404,13 +406,26 @@ namespace imghash {
 		return bytes;
 	}
 
+	const std::string BlockHasher::type_string = "BLOCK";
+
+	const std::string& BlockHasher::get_type() const {
+		return type_string;
+	}
+
 	DCTHasher::DCTHasher(unsigned M, bool even)
 		: N_(128), M_(M), even_(even), m_(mat(N_, M_, even_))
 	{
-		//nothing to do
+		std::ostringstream oss;
+		oss << "DCT" << M;
+		if (even) oss << "E";
+		type_string_ = oss.str();
 	}
 
 	DCTHasher::DCTHasher() : DCTHasher(8, false) {}
+
+	const std::string& DCTHasher::get_type() const {
+		return type_string_;
+	}
 
 	std::vector<float> DCTHasher::mat(unsigned N, unsigned M)
 	{

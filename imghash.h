@@ -217,13 +217,15 @@ namespace imghash {
 		static constexpr size_t hist_bins = 256;
 
 		Image<float> img;
-		std::vector<size_t> hist, tile_w, tile_h;
-		size_t in_h, in_w, in_c, y, i, ty;
-		bool grayscale;
+		std::vector<size_t> hist; //histogram
+		std::vector<size_t> tile_w, tile_h; //tile sizes for resizing
+		size_t in_h, in_w, in_c; //input height, width, channels
+		size_t y, i; // the current image row, and pixel index
+		size_t ty; //the current row within the tile (downsampling) or tile within the image (upsampling)
 	public:
 		
 		Preprocess();
-		Preprocess(size_t w, size_t h, bool grayscale);
+		Preprocess(size_t w, size_t h);
 
 		//by row:
 		void start(size_t input_height, size_t input_width, size_t input_channels);
@@ -263,14 +265,15 @@ namespace imghash {
 			else {
 				std::vector<float> tmp(img.width * img.channels, 0);
 				resize_row<RowT, float, float>(in_c, in_w, input_row, img.width, tmp.data(), tile_w, false, hist);
-				size_t th = tile_h[y];
-				for (ty = 0; ty < th; ++ty, ++y, i += img.row_size) {
+				size_t th = tile_h[ty++];
+				for (size_t k = 0; k < th; ++k, ++y, i += img.row_size) {
 					for (size_t x = 0, j = 0; x < img.width; ++x) {
 						for (size_t c = 0; c < img.channels; ++c, ++j) {
 							img[i + j] = tmp[j];
 						}
 					}
 				}
+
 			}
 			//do we need more rows?
 			return y < img.height;
@@ -297,12 +300,13 @@ namespace imghash {
 		Hasher();
 		virtual ~Hasher() {}
 		virtual hash_type apply(const Image<float>& image) = 0;
+		virtual const std::string& get_type() const = 0;
 
 		//return true if the hashes are equal up to the length of the shorter hash
 		static bool match(const hash_type& h1, const hash_type& h2);
 		//return true if the hashes match and are the same length
 		static bool equal(const hash_type& h1, const hash_type& h2);
-		
+
 		//bitwise distance, up to the length of the shorter hash
 		static uint32_t hamming_distance(const hash_type& h1, const hash_type& h2);
 
@@ -312,11 +316,10 @@ namespace imghash {
 	//! Block-average hash
 	class BlockHasher : public Hasher
 	{
-	protected:
-		bool even;
+		static const std::string type_string;
 	public:
-		BlockHasher(bool even);
-		hash_type apply(const Image<float>& image);
+		hash_type apply(const Image<float>& image) override;
+		const std::string& get_type() const override;
 	};
 
 	//! Discrete Cosine Transform hash
@@ -363,6 +366,9 @@ namespace imghash {
 
 		bool even_;
 		unsigned N_, M_;
+
+		std::string type_string_;
+
 		//! 1D DCT matrix coefficients
 		std::vector<float> m_;
 		
@@ -390,7 +396,10 @@ namespace imghash {
 		DCTHasher(unsigned M, bool even);
 		
 		//! Apply the hash function
-		hash_type apply(const Image<float>& image);
+		hash_type apply(const Image<float>& image) override;
+
+		//! Get the hasher's type string
+		const std::string& get_type() const override;
 	};
 
 }

@@ -40,10 +40,10 @@ namespace imghash {
 		unsigned char magic[2] = { 0 };
 		
 		auto off = ftell(file);
-		fread(magic, sizeof(unsigned char), 2, file);
+		size_t n = fread(magic, sizeof(unsigned char), 2, file);
 		fseek(file, off, SEEK_SET);
 
-		return (magic[0] == 0xFF) && (magic[1] == 0xD8);
+		return (n == 2) && (magic[0] == 0xFF) && (magic[1] == 0xD8);
 	}
 
 	Image<float> load_jpeg(FILE* file, Preprocess& prep)

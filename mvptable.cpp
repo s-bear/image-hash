@@ -1,6 +1,7 @@
 
 #include "mvptable.h"
 #include <sqlite3.h>
+#include <cmath>
 #include <algorithm>
 #include <cassert>
 
@@ -577,6 +578,7 @@ MVPTable::blob_type MVPTable::find_vantage_point(size_t sample_size)
 		// since we don't have any vantage points yet, we will rank
 		// the points by the sum of the distances to all of the other points
 		// and pick the greatest
+		//the static_cast to unsigned is OK because a previous case confirmed num_points > 0
 		if (static_cast<size_t>(num_points) <= sample_size) {
 			//we have few points, so do the pairwise distance between all
 			return cache.exec_getBlob(
