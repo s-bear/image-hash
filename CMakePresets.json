@@ -1,0 +1,278 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "common-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir":  "${sourceDir}/out/install/${presetName}",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "inherits": "common-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": [ "Linux" ] 
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
+        }
+      }
+    },
+    {
+      "name": "linux-x64-debug",
+      "inherits": "linux-base",
+      "displayName": "x64 Debug",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-x64-release",
+      "inherits": "linux-base",
+      "displayName": "x64 Release",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "inherits": "common-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-x64-debug",
+      "inherits": "windows-base",
+      "displayName": "x64 Debug",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      }
+    },
+    {
+      "name": "windows-x86-debug",
+      "inherits": "windows-base",
+      "displayName": "x86 Debug",
+      "architecture": {
+        "value": "x86",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "x86-windows"
+      }
+    },
+    {
+      "name": "windows-x64-release",
+      "inherits": "windows-base",
+      "displayName": "x64 Release",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "LINK_STATIC": "ON"
+      }
+    },
+    {
+      "name": "windows-x86-release",
+      "inherits": "windows-base",
+      "displayName": "x86 Release",
+      "architecture": {
+        "value": "x86",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x86-windows-static",
+        "LINK_STATIC": "ON"
+      }
+    },
+    {
+      "name": "osx-base",
+      "hidden": true,
+      "inherits": "common-base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": ["macOS"]
+        },
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
+        }
+      }
+    },
+    {
+      "name": "osx-x64-debug",
+      "inherits": "osx-base",
+      "displayName": "x64 Debug",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "osx-x64-release",
+      "inherits": "osx-base",
+      "displayName": "x64 Release",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "common-base",
+      "hidden": true,
+      "jobs": 1,
+      "cleanFirst": false
+    },
+    {
+      "name": "linux-base",
+      "inherits": "common-base",
+      "hidden": true
+    },
+    {
+      "name": "windows-base",
+      "inherits": "common-base",
+      "hidden": true
+    },
+    {
+      "name": "osx-base",
+      "inherits": "common-base",
+      "hidden": true
+    },
+    {
+      "name": "linux-x64-debug",
+      "inherits": "linux-base",
+      "displayName": "x64 Debug",
+      "configurePreset": "linux-x64-debug"
+    },
+    {
+      "name": "linux-x64-release",
+      "inherits": "linux-base",
+      "displayName": "x64 Release",
+      "configurePreset": "linux-x64-release"
+    },
+    {
+      "name": "windows-x64-debug",
+      "inherits": "windows-base",
+      "displayName": "x64 Debug",
+      "configurePreset": "windows-x64-debug"
+    },
+    {
+      "name": "windows-x86-debug",
+      "inherits": "windows-base",
+      "displayName": "x86 Debug",
+      "configurePreset": "windows-x86-debug"
+    },
+    {
+      "name": "windows-x64-release",
+      "inherits": "windows-base",
+      "displayName": "x64 Release",
+      "configurePreset": "windows-x64-release"
+    },
+    {
+      "name": "windows-x86-release",
+      "inherits": "windows-base",
+      "displayName": "x86 Release",
+      "configurePreset": "windows-x86-release"
+    },
+    {
+      "name": "osx-x64-debug",
+      "inherits": "osx-base",
+      "displayName": "x64 Debug",
+      "configurePreset": "osx-x64-debug"
+    },
+    {
+      "name": "osx-x64-release",
+      "inherits": "osx-base",
+      "displayName": "x64 Release",
+      "configurePreset": "osx-x64-release"
+    }
+  ],
+  "testPresets": [],
+  "packagePresets": [
+    {
+      "name": "common-base",
+      "hidden": true,
+      "packageDirectory": "${sourceDir}/out/package/${presetName}"
+    },
+    {
+      "name": "linux-x64",
+      "inherits": "common-base",
+      "generators": [ "TGZ" ],
+      "configurePreset": "linux-x64-release"
+    },
+    {
+      "name": "windows-x64",
+      "inherits": "common-base",
+      "generators": [ "ZIP" ],
+      "configurePreset": "windows-x64-release"
+    },
+    {
+      "name": "windows-x86",
+      "inherits": "common-base",
+      "generators": [ "ZIP" ],
+      "configurePreset": "windows-x86-release"
+    },
+    {
+      "name": "osx-x64",
+      "inherits": "common-base",
+      "generators": [ "ZIP" ],
+      "configurePreset": "osx-x64-release"
+    }
+  ]
+}

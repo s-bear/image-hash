@@ -1,0 +1,50 @@
+name: Build with CMake and vcpkg
+
+on: workflow_dispatch
+#push: branches: [ "main" ]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  job:
+    name: ${{matrix.os}}-${{github.workflow}}
+    runs-on: ${{matrix.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        build-preset: [linux-x64-release, windows-x64-release, windows-x86-release]
+        include:
+          - build-preset: linux-x64-release
+            os: ubuntu-latest
+            pack-preset: linux-x64
+          - build-preset: windows-x64-release
+            os: windows-latest
+            pack-preset: windows-x64
+          - build-preset: windows-x86-release
+            os: windows-latest
+            pack-preset: windows-x86
+    steps:
+      - uses: actions/checkout@v3
+      - uses: lukka/get-cmake@latest
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@main
+        with:
+          vcpkgGitCommitId: '501db0f17ef6df184fcdbfbe0f87cde2313b6ab1'
+          vcpkgDirectory: '${{runner.workspace}}/vcpkg'
+      - name: Run CMake
+        uses: lukka/run-cmake@main
+        with:
+          configurePreset: '${{matrix.build-preset}}'
+          configurePresetAdditionalArgs: ""
+          buildPreset: '${{matrix.build-preset}}'
+          buildPresetAdditionalArgs: ""
+      - name: Run CPack
+        run: "cpack --preset ${{matrix.pack-preset}} -P ${{matrix.pack-preset}}"
+        working-directory: '${{runner.workspace}}/image-hash'
+      - name: Upload package as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: builds
+          path: '${{runner.workspace}}/image-hash/out/package/${{matrix.pack-preset}}/*.*'

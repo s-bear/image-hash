@@ -14,7 +14,12 @@ namespace imghash {
 		MVPTable table;
 	public:
 		Impl(const std::string& path);
+		void set_meta(const std::string& key, const std::string& value);
+		bool get_meta(const std::string& key, std::string& value);
 		void insert(const point_type& point, const item_type& item);
+		void rename(const item_type& item1, const item_type& item2);
+		void remove(const item_type& item);
+		bool exists(const item_type& item);
 		std::vector<query_result> query(const point_type& point, unsigned int dist, size_t limit = 10);
 	};
 
@@ -31,10 +36,35 @@ namespace imghash {
 		//nothing else to do
 	}
 
+	bool Database::check_hash_type(const std::string& hash_type_str)
+	{
+		std::string db_hash_type;
+		if (impl->get_meta("hash_type", db_hash_type)) {
+			return db_hash_type == hash_type_str;
+		}
+		else {
+			impl->set_meta("hash_type", hash_type_str);
+			return true;
+		}
+	}
+
 	//Add a file
 	void Database::insert(const point_type& point, const item_type& item)
 	{
 		impl->insert(point, item);
+	}
+
+	void Database::rename(const item_type& item1, const item_type& item2)
+	{
+		impl->rename(item1, item2);
+	}
+	void Database::remove(const item_type& item)
+	{
+		impl->remove(item);
+	}
+	bool Database::exists(const item_type& item)
+	{
+		return impl->exists(item);
 	}
 
 	//Find similar images
@@ -48,11 +78,16 @@ namespace imghash {
 		table(db, Hasher::distance), cache(db)
 	{
 		db->exec(
+			"CREATE TABLE IF NOT EXISTS meta ("
+				"key TEXT UNIQUE,"
+				"value"
+			");"
 			"CREATE TABLE IF NOT EXISTS images ("
 				"id INTEGER PRIMARY KEY,"
-				"path TEXT UNIQUE,"
+				"path TEXT,"
 				"count INTEGER"
 			");"
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_images_path ON images(path);"
 			"CREATE TABLE IF NOT EXISTS map_images_points ("
 				"image_id INTEGER,"
 				"point_id INTEGER,"
@@ -63,6 +98,60 @@ namespace imghash {
 		);
 	}
 
+	void Database::Impl::set_meta(const std::string& key, const std::string& value) {
+		auto& stmt = cache["REPLACE INTO meta (key, value) VALUES ($key, $value);"];
+		stmt.bind("$key", key);
+		stmt.bind("$value", value);
+		cache.exec(stmt);
+	}
+
+	bool Database::Impl::get_meta(const std::string& key, std::string& value) {
+		auto& stmt = cache["SELECT value FROM meta WHERE key = $key;"];
+		stmt.bind("$key", key);
+		if (stmt.executeStep()) {
+			value = stmt.getColumn(0).getString();
+			stmt.reset();
+			return true;
+		}
+		else {
+			stmt.reset();
+			return false;
+		}
+	}
+
+	void Database::Impl::rename(const item_type& item1, const item_type& item2) 
+	{
+		auto& stmt = cache["UPDATE images SET path = $new_path WHERE path = $old_path;"];
+		stmt.bind("$new_path", item2);
+		stmt.bind("$old_path", item1);
+		cache.exec(stmt);
+	}
+
+	void Database::Impl::remove(const item_type& item)
+	{
+		auto& sel_id = cache["SELECT id FROM images WHERE path = $path;"];
+		sel_id.bind("$path", item);
+		auto id = cache.exec_getInt64(sel_id, "id");
+		auto& del = cache[
+			"DELETE FROM map_images_points WHERE image_id = $id;"
+			"DELETE FROM images WHERE id = $id;"
+		];
+		del.bind("$id", id);
+		cache.exec(del);
+	}
+	bool Database::Impl::exists(const item_type& item)
+	{
+		auto& sel_id = cache["SELECT id FROM images WHERE path = $path;"];
+		sel_id.bind("$path", item);
+		if (sel_id.executeStep()) {
+			sel_id.reset();
+			return true;
+		}
+		else {
+			sel_id.reset();
+			return false;
+		}
+	}
 	void Database::Impl::insert(const point_type& point, const item_type& path)
 	{
 		// the first point inserted will also be the first vantage point

@@ -8,9 +8,9 @@ namespace imghash {
 	{
 		png_byte header[8] = { 0 };
 		auto off = ftell(file);
-		fread(header, sizeof(png_byte), 8, file);
+		size_t n = fread(header, sizeof(png_byte), 8, file);
 		fseek(file, off, SEEK_SET);
-		return png_sig_cmp(header, 0, 8) == 0;
+		return (n == 8) && (png_sig_cmp(header, 0, 8) == 0);
 	}
 
 	namespace {
