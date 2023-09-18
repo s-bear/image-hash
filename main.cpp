@@ -14,7 +14,7 @@
 #endif
 
 #ifdef USE_SQLITE
-#include "db.h"
+#include "hashdb.h"
 #endif
 
 void print_usage() {
@@ -105,7 +105,7 @@ std::ostream& operator << (std::ostream& out, const join_t<Types...>& j) {
 }
 
 #ifdef USE_SQLITE
-void print_query(std::ostream& out, const std::vector<imghash::Database::query_result>& results, 
+void print_query(std::ostream& out, const std::vector<imghash::HashDatabase::query_result>& results,
 	const std::string& prefix = "  ", const std::string& delim = ": ", const std::string& suffix = "\n")
 {
 	for (const auto& res : results) {
@@ -277,8 +277,8 @@ int main(int argc, const char* argv[])
 	try {
 
 #ifdef USE_SQLITE
-		std::unique_ptr<imghash::Database> db;
-		if (!db_path.empty()) db = std::make_unique<imghash::Database>(db_path);
+		std::unique_ptr<imghash::HashDatabase> db;
+		if (!db_path.empty()) db = std::make_unique<imghash::HashDatabase>(db_path);
 
 		if (rename || remove || exists) {
 			if (rename) {

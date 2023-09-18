@@ -1,15 +1,14 @@
 
-#include "db.h"
-#include "SQLiteCpp/SQLiteCpp.h"
+#include "hashdb.h"
 #include "mvptable.h"
 
 #include <algorithm>
 
 namespace imghash {
 
-	class Database::Impl {
-		std::shared_ptr<SQLite::Database> db;
-		SQLStatementCache cache;
+	class Database::Impl 
+	{
+		
 
 		MVPTable table;
 	public:

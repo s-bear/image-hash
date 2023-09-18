@@ -5,190 +5,33 @@
 #include <algorithm>
 #include <cassert>
 
-SQLStatementCache::SQLStatementCache() : db(nullptr)
+/* MVPTable static members*/
+std::function<MVPTable::distance_fn> MVPTable::s_distance_fn;
+
+void MVPTable::register_distance_function(SQLite::Database& db, distance_fn& fn)
 {
-	//nothing to do
+	s_distance_fn = fn;
+	db.create_function("mvp_distance", fn);
 }
 
-SQLStatementCache::SQLStatementCache(std::shared_ptr<SQLite::Database> db) : db(db)
-{
-	//nothing to do
-}
-
-//access cached statements
-SQLite::Statement& SQLStatementCache::get(const std::string& stmt)
-{
-	// look up stmt in the cache
-	// if it doesn't exist yet, construct a new statement with (*db, stmt)
-	// returns pair<iterator, bool> pointing to the item, and true if the new item was inserted
-	if (!db) throw std::runtime_error("No database connection");
-	auto res = stmts.try_emplace(stmt, *db, stmt);
-	return res.first->second;
-}
-
-void SQLStatementCache::exec(SQLite::Statement& stmt)
-{
-	stmt.exec();
-	stmt.reset();
-}
-
-void SQLStatementCache::exec(const std::string& stmt)
-{
-	exec(get(stmt));
-}
-
-int32_t SQLStatementCache::exec_getInt(SQLite::Statement& stmt, int column)
-{
-	if (stmt.executeStep()) {
-		auto r = stmt.getColumn(column).getInt();
-		stmt.reset();
-		return r;
-	}
-	else {
-		throw std::runtime_error("Error executing statement");
-	}
-}
-
-int64_t SQLStatementCache::exec_getInt64(SQLite::Statement& stmt, int column)
-{
-	if (stmt.executeStep()) {
-		auto r = stmt.getColumn(column).getInt64();
-		stmt.reset();
-		return r;
-	}
-	else {
-		throw std::runtime_error("Error executing statement");
-	}
-}
-
-std::string SQLStatementCache::exec_getString(SQLite::Statement& stmt, int column)
-{
-	if (stmt.executeStep()) {
-		auto r = stmt.getColumn(column).getString();
-		stmt.reset();
-		return r;
-	}
-	else {
-		throw std::runtime_error("Error executing statement");
-	}
-}
-
-double SQLStatementCache::exec_getDouble(SQLite::Statement& stmt, int column)
-{
-	if (stmt.executeStep()) {
-		auto r = stmt.getColumn(column).getDouble();
-		stmt.reset();
-		return r;
-	}
-	else {
-		throw std::runtime_error("Error executing statement");
-	}
-}
-
-std::vector<uint8_t> SQLStatementCache::exec_getBlob(SQLite::Statement& stmt, int column)
-{
-	if (stmt.executeStep()) {
-		auto col = stmt.getColumn(column);
-		const uint8_t* data = static_cast<const uint8_t*>(col.getBlob());
-		int n = col.getBytes();
-		std::vector<uint8_t> r(data, data + n);
-		stmt.reset();
-		return r;
-	}
-	else {
-		throw std::runtime_error("Error executing statement");
-	}
-}
-
-int32_t SQLStatementCache::exec_getInt(SQLite::Statement& stmt, const std::string& column)
-{
-	return exec_getInt(stmt, stmt.getColumnIndex(column.c_str()));
-}
-int64_t SQLStatementCache::exec_getInt64(SQLite::Statement& stmt, const std::string& column)
-{
-	return exec_getInt64(stmt, stmt.getColumnIndex(column.c_str()));
-}
-std::string SQLStatementCache::exec_getString(SQLite::Statement& stmt, const std::string& column)
-{
-	return exec_getString(stmt, stmt.getColumnIndex(column.c_str()));
-}
-double SQLStatementCache::exec_getDouble(SQLite::Statement& stmt, const std::string& column)
-{
-	return exec_getDouble(stmt, stmt.getColumnIndex(column.c_str()));
-}
-std::vector<uint8_t> SQLStatementCache::exec_getBlob(SQLite::Statement& stmt, const std::string& column)
-{
-	return exec_getBlob(stmt, stmt.getColumnIndex(column.c_str()));
-}
-
-int32_t SQLStatementCache::exec_getInt(const std::string& stmt, int column)
-{
-	return exec_getInt(get(stmt), column);
-}
-int64_t SQLStatementCache::exec_getInt64(const std::string& stmt, int column)
-{
-	return exec_getInt64(get(stmt), column);
-}
-std::string SQLStatementCache::exec_getString(const std::string& stmt, int column)
-{
-	return exec_getString(get(stmt), column);
-}
-double SQLStatementCache::exec_getDouble(const std::string& stmt, int column)
-{
-	return exec_getDouble(get(stmt), column);
-}
-std::vector<uint8_t> SQLStatementCache::exec_getBlob(const std::string& stmt, int column)
-{
-	return exec_getBlob(get(stmt), column);
-}
-
-int32_t SQLStatementCache::exec_getInt(const std::string& stmt, const std::string& column)
-{
-	return exec_getInt(get(stmt), column);
-}
-int64_t SQLStatementCache::exec_getInt64(const std::string& stmt, const std::string& column)
-{
-	return exec_getInt64(get(stmt), column);
-}
-std::string SQLStatementCache::exec_getString(const std::string& stmt, const std::string& column)
-{
-	return exec_getString(get(stmt), column);
-}
-double SQLStatementCache::exec_getDouble(const std::string& stmt, const std::string& column)
-{
-	return exec_getDouble(get(stmt), column);
-}
-std::vector<uint8_t> SQLStatementCache::exec_getBlob(const std::string& stmt, const std::string& column)
-{
-	return exec_getBlob(get(stmt), column);
-}
-
+/* non-static */
 
 void MVPTable::check_db() {
-	if (db == nullptr) throw std::runtime_error("No database connection");
-}
-
-MVPTable::MVPTable()
-	: db(nullptr), cache(nullptr)
-{
-	//nothing else to do
+	if (!m_db) throw std::runtime_error("No database connection");
 }
 
 // Construct, open or create the database
-MVPTable::MVPTable(std::shared_ptr<SQLite::Database> db, std::function<distance_fn> dist_fn) 
-	: db(db), cache(db)
+MVPTable::MVPTable(SQLite::Database& db) 
+	: m_db(db)
 {
-	if (db == nullptr) return;
-	
 	//initialize database as necessary
-	db->exec(
+	m_db.exec(
 		"CREATE TABLE IF NOT EXISTS mvp_counts ("
 		"id INTEGER PRIMARY KEY,"
 		"points INTEGER,"
 		"vantage_points INTEGER"
 		");"
-	);
-	db->exec(
+
 		"CREATE TABLE IF NOT EXISTS mvp_points ("
 		"id INTEGER PRIMARY KEY,"
 		//The partition is based on mvp_vantage_points bound_0,1,2,3
@@ -201,8 +44,7 @@ MVPTable::MVPTable(std::shared_ptr<SQLite::Database> db, std::function<distance_
 		");"
 		"CREATE INDEX IF NOT EXISTS mvp_idx_points_part ON mvp_points(partition);"
 		"CREATE UNIQUE INDEX IF NOT EXISTS mvp_idx_points_value ON mvp_points(value);"
-	);
-	db->exec(
+	
 		"CREATE TABLE IF NOT EXISTS mvp_vantage_points ("
 		"id INTEGER PRIMARY KEY,"
 		//bound_0 is always 0
@@ -215,8 +57,7 @@ MVPTable::MVPTable(std::shared_ptr<SQLite::Database> db, std::function<distance_
 		"count_3 INTEGER," //number of points in shell 3 (bound_3 <= d )
 		"value BLOB UNIQUE" // not necessarily in mvp_points
 		");"
-	);
-	db->exec(
+	
 		"CREATE TEMPORARY TABLE mvp_query ("
 			"id INTEGER PRIMARY KEY,"
 			"dist INTEGER" //distance to query point
@@ -224,12 +65,12 @@ MVPTable::MVPTable(std::shared_ptr<SQLite::Database> db, std::function<distance_
 	);
 	
 	//if counts is empty, initialize it
-	if (db->execAndGet("SELECT COUNT(1) FROM mvp_counts").getInt64() == 0) {
-		auto num_points = db->execAndGet("SELECT COUNT(1) FROM mvp_points").getInt64();
+	if (m_db("SELECT COUNT(1) FROM mvp_counts").step_get_int64() == 0) {
+		auto num_points = m_db("SELECT COUNT(1) FROM mvp_points").step_get_int64();
 
-		auto num_vantage_points = db->execAndGet("SELECT COUNT(1) FROM mvp_vantage_points").getInt64();
+		auto num_vantage_points = db("SELECT COUNT(1) FROM mvp_vantage_points").step_get_int64();
 
-		auto ins_counts = SQLite::Statement(*db,
+		auto ins_counts = db(
 			"INSERT INTO mvp_counts(points,vantage_points)"
 			"VALUES($points,$vantage_points);");
 
@@ -237,39 +78,32 @@ MVPTable::MVPTable(std::shared_ptr<SQLite::Database> db, std::function<distance_
 		ins_counts.bind("$vantage_points", num_vantage_points);
 		ins_counts.exec();
 	}
-	
-	set_dist_fn(std::move(dist_fn));
-	db->createFunction("mvp_distance", 2, true, nullptr, MVPTable::sql_distance);
 }
 
-std::function<MVPTable::distance_fn> MVPTable::dist_fn;
+SQLite::Statement MVPTable::make_insert_point(const std::vector<int64_t>& vp_ids) {
+	static const std::string_view s1 = "INSERT INTO mvp_points(partition, value";
+	static const std::string_view s2 = ", d"; // repeated for each vp_id
+	static const std::string_view s3 = ") VALUES ($partition, $value";
+	static const std::string_view s4 = ", $d"; // repeated for each vp_id
+	static const std::string_view s5 = ") RETURNING id;";
 
-void MVPTable::set_dist_fn(std::function<distance_fn> df)
-{
-	dist_fn = std::move(df);
-}
-
-void MVPTable::sql_distance(sqlite3_context* ctx, int n, sqlite3_value* args[])
-{
-	if (n != 2) {
-		sqlite3_result_error(ctx, "mvp_distance requires 2 arguments.", -1);
-		return;
-	}
-	auto p1 = get_blob(args[0]);
-	auto p2 = get_blob(args[1]);
-	auto d = dist_fn(p1, p2);
-	sqlite3_result_int(ctx, d);
-}
-
-const std::string MVPTable::str_ins_point(const std::vector<int64_t>& vp_ids) {
-	std::string stmt1 = "INSERT INTO mvp_points(partition, value";
-	std::string stmt2 = ") VALUES ($partition, $value";
-	for (int64_t id : vp_ids) {
+	size_t n = vp_ids.size();
+	std::vector<std::string> id_strs;
+	id_strs.reserve(n);
+	size_t ids_len = 0;
+	for (auto id : vp_ids) {
 		auto id_str = std::to_string(id);
-		stmt1 += ", d" + id_str;
-		stmt2 += ", $d" + id_str;
+		ids_len += id_str.size();
+		id_strs.push_back(std::move(id_str));
 	}
-	return stmt1 + stmt2 + ") RETURNING id;";
+
+	std::string stmt(s1);
+	stmt.reserve(s1.size() + (s2.size() + s4.size())*n + ids_len*2 + s3.size() + s5.size());
+	for (auto& id : id_strs) stmt.append(s2).append(id);
+	stmt.append(s3);
+	for (auto& id : id_strs) stmt.append(s4).append(id);
+	stmt.append(s5);
+	return m_db(stmt);
 }
 
 const std::string MVPTable::str_ins_query(const std::vector<int64_t>& vp_ids)
@@ -281,141 +115,94 @@ const std::string MVPTable::str_ins_query(const std::vector<int64_t>& vp_ids)
 	);
 }
 
-MVPTable::blob_type MVPTable::get_blob(sqlite3_value* val)
-{
-	//TODO: error checking
-	size_t n = sqlite3_value_bytes(val);
-	const uint8_t* data = static_cast<const uint8_t*>(sqlite3_value_blob(val));
-	return blob_type(data, data + n);
-}
-
-MVPTable::blob_type MVPTable::get_blob(SQLite::Column& col) 
-{
-	size_t n = col.getBytes();
-	const uint8_t* data = static_cast<const uint8_t*>(col.getBlob());
-	return blob_type(data, data + n);
-}
-
-void MVPTable::update_vp_ids(const std::vector<int64_t>& vp_ids)
-{
-	if (!std::equal(vp_ids_.begin(), vp_ids_.end(), vp_ids.begin(), vp_ids.end())) {
-		ins_point = std::make_unique<SQLite::Statement>(*db, str_ins_point(vp_ids));
-		ins_query = std::make_unique<SQLite::Statement>(*db, str_ins_query(vp_ids));
-		vp_ids_ = vp_ids;
-	}
-}
-
 int64_t MVPTable::count_points() {
-	return cache.exec_getInt64("SELECT points FROM mvp_counts WHERE id = 1;", "points");
+	if (!m_count_points) m_count_points = m_db("SELECT points FROM mvp_counts WHERE id = 1;");
+	return m_count_points.reset().step_get_int64();
 }
 
 int64_t MVPTable::count_vantage_points() {
-	return cache.exec_getInt64("SELECT vantage_points FROM mvp_counts WHERE id = 1;", "vantage_points");
+	if (!m_count_vantage_points) m_count_vantage_points = m_db("SELECT vantage_points FROM mvp_counts WHERE id = 1;");
+	return m_count_vantage_points.reset().step_get_int64();
 }
 
-int64_t MVPTable::insert_point(const blob_type& p_value)
+int64_t MVPTable::insert_point(blob_view p_value)
 {
  	check_db();
 
 	//is the point already in the database?
-	auto& sel_pt = cache["SELECT id FROM mvp_points WHERE value = $value;"];
-	sel_pt.bind("$value", p_value.data(), static_cast<int>(p_value.size()));
-	if (sel_pt.executeStep()) {
-		//yes
-		auto id = sel_pt.getColumn(0).getInt64();
-		sel_pt.reset();
-		return id;
+	if (!m_find_point) m_find_point = m_db("SELECT id FROM mvp_points WHERE value = $value;");
+	m_find_point.reset();
+	m_find_point.bind(1, p_value, SQLITE_STATIC);
+	if (m_find_point.step()) {
+		//yes -- return the id
+		return m_find_point.get_int64();
 	}
 	else {
-		sel_pt.reset();
-		//no: we need to add the point
-
+		//no -- we need to insert it
 		//iterate over the vantage points
-		//   calculating the distance from each to p_value (dist)
-		//   and which shell p_value falls into
+		//  we each vp's id, the distance to the new point, and the partition bits
+		sqlite_int64 partition = 0;
+		std::vector<sqlite_int64> vp_ids;
+		std::vector<int> dists;
+		vp_ids.reserve(32); //there are at most 32 vantage points
+		dists.reserve(32);
 
-		auto& sel_vps = cache[
-			"WITH vp_dists AS ("
-				"SELECT id, mvp_distance(value, $pt) AS dist "
-				"FROM mvp_vantage_points ORDER BY id ASC) "
-			"SELECT id, dist, CASE "
-					"WHEN dist >= bound_3 THEN 3 "
-					"WHEN dist >= bound_2 THEN 2 "
-					"WHEN dist >= bound_1 THEN 1 "
-					"ELSE 0 "
-				"END AS shell "
-			"FROM vp_dists JOIN mvp_vantage_points USING (id) ORDER BY id ASC;"
-		];
-
-		auto& inc_count_0 = cache["UPDATE mvp_vantage_points SET count_0 = count_0 + 1 WHERE id = $id"];
-		auto& inc_count_1 = cache["UPDATE mvp_vantage_points SET count_1 = count_1 + 1 WHERE id = $id"];
-		auto& inc_count_2 = cache["UPDATE mvp_vantage_points SET count_2 = count_2 + 1 WHERE id = $id"];
-		auto& inc_count_3 = cache["UPDATE mvp_vantage_points SET count_3 = count_3 + 1 WHERE id = $id"];
-
-		std::vector<int64_t> vp_ids;
-		std::vector<int32_t> dists;
-		int64_t part = 0;
-		sel_vps.bind("$pt", p_value.data(), static_cast<int>(p_value.size()));
-		while (sel_vps.executeStep()) {
-			auto id = sel_vps.getColumn("id").getInt64();
-			auto dist = sel_vps.getColumn("dist").getInt();
-			auto shell = sel_vps.getColumn("shell").getInt();
-
-			vp_ids.push_back(id);
-			dists.push_back(dist);
-
-			//increment shell count
-			if (shell == 3) {
-				inc_count_3.bind("$id", id);
-				inc_count_3.exec();
-				inc_count_3.reset();
-			}
-			else if (shell == 2) {
-				inc_count_2.bind("$id", id);
-				inc_count_2.exec();
-				inc_count_2.reset();
-			}
-			else if (shell == 1) {
-				inc_count_1.bind("$id", id);
-				inc_count_1.exec();
-				inc_count_1.reset();
-			}
-			else if (shell == 0) {
-				inc_count_0.bind("$id", id);
-				inc_count_0.exec();
-				inc_count_0.reset();
-			}
-			else {
-				throw std::runtime_error("Error inserting point: invalid shell");
-			}
-
-			//calculate the partition
-			part |= partition_bits(shell, id);
+		if (!m_select_vps) {
+			m_select_vps = m_db("SELECT id, bound_1, bound_2, bound_3, value FROM mvp_vantage_points ORDER by id ASC;");
 		}
-		sel_vps.reset();
+		if (!m_vp_count_0) {
+			m_vp_count_0 = m_db("UPDATE mvp_vantage_points SET count_0 = count_0 + 1 WHERE id = $id");
+			m_vp_count_1 = m_db("UPDATE mvp_vantage_points SET count_1 = count_1 + 1 WHERE id = $id");
+			m_vp_count_2 = m_db("UPDATE mvp_vantage_points SET count_2 = count_2 + 1 WHERE id = $id");
+			m_vp_count_3 = m_db("UPDATE mvp_vantage_points SET count_3 = count_3 + 1 WHERE id = $id");
+		}
+		
+		m_select_vps.reset();
+		m_select_vps.exec(
+			[&](sqlite_int64 id, int b1, int b2, int b3, blob_view value) {
+				auto dist = s_distance_fn(value, p_value);
+				vp_ids.push_back(id);
+				dists.push_back(dist);
+				// which shell around the vantage point does the point lie in?
+				// we increment that shell's count in the vantage point
+				int shell;
+				if (dist >= b3) {
+					shell = 3;
+					m_vp_count_3.reset().bind(1, id).step();
+				}
+				else if (dist >= b2) {
+					shell = 2;
+					m_vp_count_2.reset().bind(1, id).step();
+				}
+				else if (dist >= b1) {
+					shell = 1;
+					m_vp_count_1.reset().bind(1, id).step();
+				}
+				else {
+					shell = 0;
+					m_vp_count_0.reset().bind(1, id).step();
+				}
+				// the partition is the intersection of all of the shells
+				partition |= partition_bits(shell, id);
+		});
+		
+		// now we need to insert the point
+		// INSERT INTO mvp_points(partition, value, d0, d1, ...) VALUES ($partition, $value, $d0, $d1, ...) RETURNING id;
+		if (!m_insert_point) m_insert_point = make_insert_point(vp_ids);
+		if (!m_add_point) m_add_point = m_db("UPDATE mvp_counts SET points = points + 1 WHERE id = 1;");
 
-		//update the insert_point statement if vp_ids changed
-		update_vp_ids(vp_ids);
-
-		ins_point->bind("$partition", part);
-		ins_point->bind("$value", p_value.data(), static_cast<int>(p_value.size()));
+		m_insert_point.bind(1, partition);
+		m_insert_point.bind(2, p_value, SQLITE_STATIC);
 		for (int i = 0; i < dists.size(); ++i) {
-			ins_point->bind(i + 3, dists[i]); //the first parameter has index 1, so these start at 3
+			m_insert_point.bind(i + 3, dists[i]);
 		}
-		if (ins_point->executeStep()) {
-			cache.exec("UPDATE mvp_counts SET points = points + 1 WHERE id = 1;");
-			
-			auto id = ins_point->getColumn(0).getInt64();
-			ins_point->reset();
-			return id;
-		}
-		else {
-			throw std::runtime_error("Error inserting point");
-		}
+		auto pt_id = m_insert_point.reset().step_get_int64();
+		m_add_point.reset().step();
+
 	}
 }
 
-int64_t MVPTable::insert_vantage_point(const blob_type& vp_value)
+sqlite_int64 MVPTable::insert_vantage_point(blob_view vp_value)
 {
 	check_db();
 	//TODO: maximum number of vantage points? at 4 shells per, the number of partitions hits 64 bits at 32
@@ -433,16 +220,14 @@ int64_t MVPTable::insert_vantage_point(const blob_type& vp_value)
 
 	//1. add the new row to mvp_vantage_points and get the new vp's id
 	
-	auto& ins_vp = cache[
-		"INSERT INTO mvp_vantage_points(value) VALUES($value) RETURNING id;"
-	];
-
+	auto insert_vp = m_db("INSERT INTO mvp_vantage_points(value) VALUES($value) RETURNING id;");
+	
 	int64_t vp_id;
-	ins_vp.bind("$value", vp_value.data(), static_cast<int>(vp_value.size()));
-	if (ins_vp.executeStep()) {
-		vp_id = ins_vp.getColumn("id").getInt64();
-		cache.exec("UPDATE mvp_counts SET vantage_points = vantage_points + 1 WHERE id = 1;");
-		ins_vp.reset();
+	insert_vp.bind("$value", vp_value.data(), static_cast<int>(vp_value.size()));
+	if (insert_vp.step()) {
+		vp_id = insert_vp.get_int64();
+		m_db.exec("UPDATE mvp_counts SET vantage_points = vantage_points + 1 WHERE id = 1;");
+		insert_vp.reset();
 	}
 	else {
 		throw std::runtime_error("Error inserting new vantage_point");
@@ -451,13 +236,13 @@ int64_t MVPTable::insert_vantage_point(const blob_type& vp_value)
 	//2. add the new column of distances to mvp_points
 	std::string col_name = "d" + std::to_string(vp_id);
 
-	db->exec("ALTER TABLE mvp_points ADD COLUMN " + col_name + " INTEGER;");
+	m_db.exec("ALTER TABLE mvp_points ADD COLUMN " + col_name + " INTEGER;");
 	
-	db->exec("CREATE INDEX mvp_idx_" + col_name + " ON mvp_points(" + col_name + ");");
+	m_db.exec("CREATE INDEX mvp_idx_" + col_name + " ON mvp_points(" + col_name + ");");
 	
-	auto upd_col = SQLite::Statement(*db, "UPDATE mvp_points SET " + col_name + " = mvp_distance($vp_value, value);");
-	upd_col.bind("$vp_value", vp_value.data(), static_cast<int>(vp_value.size()));
-	cache.exec(upd_col);
+	auto update_col = m_db("UPDATE mvp_points SET " + col_name + " = mvp_distance($vp_value, value);");
+	update_col.bind(1, vp_value, SQLITE_STATIC);
+	update_col.exec();
 
 	//3. balance the shells
 	balance(vp_id);
@@ -472,19 +257,21 @@ int64_t MVPTable::query(const blob_type& q_value, uint32_t radius)
 	//Iterate over all of the vantage points
 	// getting the distance from each to the query point
 	// and for each shell, whether that shell intersects the query ball
-	auto& sel_vps = cache[
-		"WITH vp_dists AS ("
-			"SELECT id, mvp_distance(value, $pt) AS dist "
-			"FROM mvp_vantage_points ORDER BY id ASC) "
-		"SELECT "
-			"id,"
-			"dist,"
-			"CASE WHEN dist + $rad >= bound_3 THEN 1 ELSE 0 END AS shell_3,"
-			"CASE WHEN bound_3 > bound_2 AND dist + $rad >= bound_2 AND dist - $rad < bound_3 THEN 1 ELSE 0 END AS shell_2,"
-			"CASE WHEN bound_2 > bound_1 AND dist + $rad >= bound_1 AND dist - $rad < bound_2 THEN 1 ELSE 0 END AS shell_1,"
-			"CASE WHEN bound_1 > 0 AND dist - $rad < bound_1 THEN 1 ELSE 0 END AS shell_0 "
-		"FROM vp_dists JOIN mvp_vantage_points USING (id) ORDER BY id ASC;"
-	];
+	if (!m_q_sel_vps.ok()) {
+		m_q_sel_vps = m_db(
+			"WITH vp_dists AS ("
+				"SELECT id, mvp_distance(value, $pt) AS dist "
+					"FROM mvp_vantage_points ORDER BY id ASC) "
+				"SELECT "
+					"id,"
+					"dist,"
+					"CASE WHEN dist + $rad >= bound_3 THEN 1 ELSE 0 END AS shell_3,"
+					"CASE WHEN bound_3 > bound_2 AND dist + $rad >= bound_2 AND dist - $rad < bound_3 THEN 1 ELSE 0 END AS shell_2,"
+					"CASE WHEN bound_2 > bound_1 AND dist + $rad >= bound_1 AND dist - $rad < bound_2 THEN 1 ELSE 0 END AS shell_1,"
+					"CASE WHEN bound_1 > 0 AND dist - $rad < bound_1 THEN 1 ELSE 0 END AS shell_0 "
+				"FROM vp_dists JOIN mvp_vantage_points USING (id) ORDER BY id ASC;"
+		);
+	}
 
 	std::vector<int64_t> vp_ids;
 	std::vector<int64_t> parts;

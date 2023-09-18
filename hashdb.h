@@ -8,7 +8,7 @@
 
 namespace imghash {
 
-	class Database {
+	class HashDatabase {
 		class Impl;
 		std::unique_ptr<Impl> impl;
 	public:
@@ -17,10 +17,10 @@ namespace imghash {
 		using query_result = std::tuple<int32_t, item_type, int32_t>;
 
 		//Open the database
-		Database(const std::string& path);
+		HashDatabase(const std::string& path);
 
 		//Close the database
-		~Database();
+		~HashDatabase();
 
 		//check that the database was created with the given hash type
 		// if no hash type is in the database, (ie. first use) then sets the hash type

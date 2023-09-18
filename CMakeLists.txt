@@ -4,6 +4,8 @@
 cmake_minimum_required (VERSION 3.8)
 
 cmake_policy(SET CMP0091 NEW)
+cmake_policy(SET CMP0076 NEW)
+
 set(LINK_STATIC OFF CACHE BOOL "Use statically linked libraries on windows.")
 if(LINK_STATIC)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -13,12 +15,12 @@ project (imghash)
 
 find_package(JPEG)
 find_package(PNG)
-find_package(SQLiteCpp)
+find_package(SQLite3)
 
 # Add source to this project's executable.
 add_executable (imghash main.cpp imghash.cpp)
 
-target_compile_features(imghash PUBLIC cxx_std_17)
+target_compile_features(imghash PUBLIC cxx_std_20)
 
 if(JPEG_FOUND)
 target_sources(imghash PUBLIC jpeg.cpp)
@@ -35,9 +37,9 @@ target_compile_definitions(imghash PRIVATE USE_PNG)
 set(features "${features} PNG")
 endif()
 
-if(SQLiteCpp_FOUND)
-target_sources(imghash PUBLIC mvptable.cpp db.cpp)
-target_link_libraries(imghash PRIVATE SQLiteCpp)
+if(SQLite3_FOUND)
+target_sources(imghash PUBLIC mvptable.cpp hashdb.cpp sqlitecpp.cpp)
+target_link_libraries(imghash PRIVATE SQLite::SQLite3)
 target_compile_definitions(imghash PRIVATE USE_SQLITE)
 set(features "${features} SQLITE")
 endif()

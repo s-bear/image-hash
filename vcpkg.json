@@ -5,6 +5,6 @@
   "dependencies": [
     "libjpeg-turbo",
     "libpng",
-    "sqlitecpp"
+    "sqlite3"
   ]
 }
