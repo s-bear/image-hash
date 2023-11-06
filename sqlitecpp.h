@@ -24,7 +24,24 @@ namespace SQLite
 
 	inline void check_ok(int result) { check<SQLITE_OK>(result); }
 
-	using blob_view = std::span<const std::byte>;
+	class blob_view : private std::span<const std::byte> 
+	{
+	public:
+		using std::span<const std::byte>::span;
+		using std::span<const std::byte>::operator=;
+		using std::span<const std::byte>::begin;
+		using std::span<const std::byte>::end;
+		using std::span<const std::byte>::size;
+		using std::span<const std::byte>::data;
+		using std::span<const std::byte>::empty;
+		using std::span<const std::byte>::operator[];
+		
+		constexpr blob_view subview(size_t offset, size_t count = std::dynamic_extent) const
+		{
+			return std::span<const std::byte>::subspan(offset, count);
+		}
+	};
+
 	using text_view = std::string_view;
 	using sql_function = void(&)(sqlite3_context*, int, sqlite3_value**);
 
