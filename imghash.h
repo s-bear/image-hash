@@ -167,7 +167,7 @@ namespace imghash {
 	template<class T>
 	struct Image
 	{
-		std::shared_ptr<T[]> data;
+		std::shared_ptr<T> data;
 		size_t height, width, channels;
 		size_t size, row_size;
 
@@ -188,7 +188,7 @@ namespace imghash {
 		Image& operator=(Image&& other) = default;
 
 		void allocate() {
-			data.reset(new T[size]);
+			data.reset(new T[size], [](T* ptr){ delete[] ptr; });
 		}
 
 		size_t index(size_t y, size_t x, size_t c) const {
@@ -201,11 +201,11 @@ namespace imghash {
 		T* end() { return begin() + size; }
 		const T* end() const { return begin() + size; }
 
-		T at(size_t i) const { return data[i]; }
-		T& at(size_t i) { return data[i]; }
+		T at(size_t i) const { return *(data.get() + i); }
+		T& at(size_t i) { return *(data.get() + i); }
 
-		T operator[](size_t i) const { return data[i]; }
-		T& operator[](size_t i) { return data[i]; }
+		T operator[](size_t i) const { return at(i); }
+		T& operator[](size_t i) { return at(i); }
 
 		T operator()(size_t y, size_t x, size_t c) const { return at(index(y, x, c)); }
 		T& operator()(size_t y, size_t x, size_t c) { return at(index(y, x, c)); }
